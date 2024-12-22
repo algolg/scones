@@ -1,10 +1,100 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Ipv4Packet = exports.Ipv4Address = exports.MacAddress = exports.DeviceID = void 0;
+exports.Ipv4Prefix = exports.Ipv4Address = exports.MacAddress = exports.DeviceID = exports.divide = exports.divide_old = exports.spread = void 0;
+const frame_1 = require("./frame");
+Uint8Array.prototype.toHex = function () {
+    return Array.from(this).map((x) => Number(x).toString(16).padStart(2, "0")).join(" ");
+};
 Uint8Array.prototype.toBinary = function () {
     return Array.from(this).map((x) => Number(x).toString(2).padStart(8, "0")).join("");
 };
+Uint8Array.prototype.toArray = function () {
+    return Array.from(this).map((x) => Number(x));
+};
+Uint8Array.prototype.toNumber = function () {
+    let num = 0;
+    for (let i = 0; i < this.length; i++) {
+        num += this[i] * 2 ** (8 * (this.length - i - 1));
+    }
+    return num;
+};
+Uint8Array.prototype.toBigInt = function () {
+    let num = BigInt(0);
+    for (let i = 0; i < this.length; i++) {
+        num += BigInt(this[i] * 2 ** (8 * (this.length - i - 1)));
+    }
+    return num;
+};
+function spread(...pairs) {
+    const values = pairs.map(x => x[0]);
+    const bits = pairs.map(x => x[1]);
+    const bytes = Math.floor(bits.reduce((sum, current) => sum + current, 0) / 8);
+    const size = pairs.length;
+    let output = Array(bytes);
+    let current_size = 0;
+    let current_ele = 0;
+    let i = 0, j = 0;
+    while (i < size) {
+        const bits_to_push = Math.min(bits[i], 8 - current_size);
+        const shift_amount = (bits_to_push >= 8) ? (bits[i] - bits_to_push) : (bits_to_push - (8 - current_size));
+        const value_to_push = Math.floor(values[i] * (2 ** -shift_amount));
+        current_size += bits_to_push;
+        if (current_size == 8) {
+            output[j++] = (current_ele + value_to_push);
+            current_ele = 0;
+            current_size = 0;
+        }
+        else if (current_size > 8) {
+            throw Error("byte cannot exceed 8 bits. there is an error in this function.");
+        }
+        else {
+            current_ele += value_to_push;
+        }
+        values[i] -= Math.floor(value_to_push * (2 ** shift_amount));
+        // console.log(`${value_to_push} ${shift_amount} ${values[i]}`)
+        bits[i] -= bits_to_push;
+        if (bits[i] == 0) {
+            i++;
+        }
+    }
+    if (current_size > 0) {
+        output.push(current_ele);
+    }
+    return output;
+}
+exports.spread = spread;
+function divide_old(arr, divisions) {
+    const split = arr.toBinary().split('').reverse();
+    let output = [];
+    for (let division of divisions) {
+        let str = "";
+        for (let i = 0; i < division; i++) {
+            str += split.pop();
+        }
+        output.push(parseInt(str, 2));
+    }
+    return output;
+}
+exports.divide_old = divide_old;
+function divide(arr, divisions) {
+    let num = arr.toBigInt();
+    let bits_remaining = arr.length * 8;
+    let output = [];
+    for (let division of divisions) {
+        bits_remaining = Math.max(bits_remaining - division, 0);
+        output.push(Number(num / BigInt(2 ** bits_remaining)));
+        num &= BigInt(2 ** bits_remaining) - BigInt(1);
+    }
+    return output;
+}
+exports.divide = divide;
 class DeviceID {
+    constructor(value) {
+        this._value = value;
+    }
+    static rand() {
+        return Math.floor(Math.random() * (this.max - this.min)) + this.min;
+    }
     get value() {
         return this._value;
     }
@@ -13,6 +103,8 @@ class DeviceID {
     }
 }
 exports.DeviceID = DeviceID;
+DeviceID.min = 100000000;
+DeviceID.max = 1000000000;
 class Uint8 {
     constructor(value) {
         this._value = value & 0xFF;
@@ -35,11 +127,29 @@ class MacAddress {
         this._value = new Uint8Array(6);
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
     }
-    set value(arr) {
-        this._value = this._value.map((ele, idx) => (ele = arr[idx]));
-    }
     get value() {
-        return this._value;
+        return new Uint8Array(this._value);
+    }
+    static get byteLength() {
+        return 6;
+    }
+    static get broadcast() {
+        return new MacAddress([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+    }
+    static rand() {
+        let valid = false;
+        let macArr;
+        while (!valid) {
+            macArr = [
+                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256),
+                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256),
+                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)
+            ];
+            if (!macArr.every((x) => x == 0xFF)) {
+                valid = true;
+            }
+        }
+        return new MacAddress(macArr);
     }
     compare(other) {
         for (let i = 0; i < 6; i++) {
@@ -55,6 +165,9 @@ class MacAddress {
     toBinary() {
         return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");
     }
+    toArray() {
+        return this._value.toArray();
+    }
     toString() {
         return Array.from(this._value).map((x) => (x).toString(16).padStart(2, "0")).join(":");
     }
@@ -69,34 +182,57 @@ class Ipv4Address {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
     }
     get value() {
-        return this._value;
+        return new Uint8Array(this._value);
+    }
+    get etherType() {
+        return frame_1.EtherType.IPv4;
+    }
+    static get byteLength() {
+        return 4;
     }
     toBinary() {
         // return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");
         return this._value.toBinary();
     }
+    toArray() {
+        return this._value.toArray();
+    }
     toString() {
         return Array.from(this._value).map((x) => (x).toString()).join(".");
     }
+    and(prefix) {
+        const anded = this._value.map((x, idx) => x & prefix.mask[idx]);
+        return new Ipv4Address([anded[0], anded[1], anded[2], anded[3]]);
+    }
+    compare(other) {
+        for (let i = 0; i < 4; i++) {
+            if (this.value[i] > other.value[i]) {
+                return 1;
+            }
+            else if (this.value[i] < other.value[i]) {
+                return -1;
+            }
+        }
+        return 0;
+    }
 }
 exports.Ipv4Address = Ipv4Address;
-class Ipv4Packet {
-    constructor(sourceIPv4, destinationIPv4) {
-        this._header = new Uint8Array(20);
-        this._header[0] = (4 << 4) + (5 /* + options.length/4 */);
-        this._header[1] = 0; // temp
-        // splitting total length into two bytes
-        this._header[2] = (20 /* + options.length + data.length*/) >> 8;
-        this._header[3] = (20 /* + options.length + data.length*/) & 0b11111111;
-        // there's more
-        sourceIPv4.value.forEach((ele, idx) => (this._header[12 + idx] = ele));
-        destinationIPv4.value.forEach((ele, idx) => (this._header[16 + idx] = ele));
+class Ipv4Prefix {
+    constructor(ipv4_prefix) {
+        this._ipv4_prefix = ipv4_prefix & 0x3F;
     }
-    get packet_length() {
-        return (this._header[2] << 8) + this._header[3];
+    set value(ipv4_prefix) {
+        this._ipv4_prefix = ipv4_prefix & 0x3F;
+    }
+    get value() {
+        return this._ipv4_prefix;
+    }
+    get mask() {
+        let arr = spread([Math.pow(2, 32 - this._ipv4_prefix) - 1, 32]);
+        return new Ipv4Address([255 - arr[0], 255 - arr[1], 255 - arr[2], 255 - arr[3]]);
     }
 }
-exports.Ipv4Packet = Ipv4Packet;
+exports.Ipv4Prefix = Ipv4Prefix;
 function main() {
     let test = new Uint8(10);
     console.log(`${test}\t${test.toBinary()}`);
