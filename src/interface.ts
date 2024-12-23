@@ -1,17 +1,90 @@
-import { Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing";
-import { IdentifiedItem, IdentifiedList, NetworkController } from "./device";
-import { EtherType } from "./frame";
+import { Identifier, Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing";
+import { ArpPacket, OP } from "./arp";
+import { IdentifiedItem, NetworkController } from "./device";
+import { EtherType, Frame } from "./frame";
 
 
 enum InfStatus {DOWN = 0, UP = 1}
 enum InfLayer { L2 = 2, L3 = 3 }
 
+export class IdentifiedList<T extends IdentifiedItem> extends Array<T> {
+    public constructor() {
+        super();
+    }
+
+    /**
+     * Pushes an IdentifiedItem and sorts the list
+     * @param item an IdentifiedItem to add
+     * @returns the index of the IdentifiedItem in the sorted list
+     */
+    public push(item: T): number {
+        super.push(item);
+        super.sort((a,b) => a.compare(b))
+        return super.indexOf(item);
+    }
+
+    public indexOf(item: T): number {
+        let start = 0;
+        let end = this.length;
+        while (start <= end) {
+            const mid = Math.trunc((end+start)/2);
+            const comparison = item.compare(this[mid]);
+            if (comparison > 0) {
+                start = mid+1;
+            }
+            else if (comparison < 0) {
+                end = mid-1;
+            }
+            else {
+                return mid;
+            }
+        }
+        return -1;
+    }
+
+    public exists(item: T): boolean {
+        return this.indexOf(item) != -1;
+    }
+
+    public indexOfId(id: Identifier): number {
+        let start = 0;
+        let end = this.length - 1;
+        while (start <= end) {
+            const mid = Math.trunc((start+end)/2);
+            const comparison = id.compare(this[mid].getId());
+            if (comparison > 0) {
+                start = mid+1;
+            }
+            else if (comparison < 0) {
+                end = mid-1;
+            }
+            else {
+                return mid;
+            }
+        }
+        return -1;
+    }
+
+    public existsId(id: Identifier): boolean {
+        return this.indexOfId(id) != -1;
+    }
+
+    public itemFromId(id: Identifier): T {
+        return this[this.indexOfId(id)];
+    }
+}
+
 /**
  * Can IdentifiedList be rebuilt extending Map<T>?
  */
 class InterfaceMatrix {
-    private _list = new IdentifiedList<Interface>();
-    private _matrix: number[][] = [];
+    private _list: IdentifiedList<Interface>;
+    private _matrix: number[][];
+
+    public constructor() {
+        this._list = new IdentifiedList<Interface>();
+        this._matrix = [];
+    }
 
     public push(inf: Interface) {
         const idx = this._list.push(inf);
@@ -69,8 +142,23 @@ class InterfaceMatrix {
         return this.getRow(mac).reduce((accumulator, currentValue) => (currentValue == 2 ? accumulator + 1 : accumulator), 0);
     }
 
+    /**
+     * Determines whether an interface is currently connected to another interface
+     * @param mac the MAC address of the interface to check
+     * @returns true if the interface is connected to some other interface, false otherwise
+     */
     private isConnected(mac: MacAddress): boolean {
         return this.getRow(mac).some((x) => x == 1);
+    }
+
+    /**
+     * Determines whether two interfaces are connected to one another
+     * @param firstMac the MAC address of the first interface
+     * @param secondMac the MAC address of the second interface
+     * @returns true if the two interfaces are connected to one another, false otherwise
+     */
+    private areConnected(firstMac: MacAddress, secondMac: MacAddress): boolean {
+        return this._matrix[this._list.indexOfId(firstMac)][this._list.indexOfId(secondMac)] == 1;
     }
 
     /**
@@ -104,26 +192,34 @@ class InterfaceMatrix {
 
     /**
      * Connect two interfaces together, as though with a cable
-     * @param a the MAC address of the first interface
-     * @param b the MAC address of the second interface
+     * @param firstMac the MAC address of the first interface
+     * @param secondMac the MAC address of the second interface
      */
-    public connect(a: MacAddress, b: MacAddress) {
-        const indexA = this._list.indexOfId(a);
-        const indexB = this._list.indexOfId(b);
-        if (this.isConnected(a)) {
-            throw `${a} is already connected`;
+    public connect(firstMac: MacAddress, secondMac: MacAddress) {
+        const firstMac_idx = this._list.indexOfId(firstMac);
+        const secondMac_idx = this._list.indexOfId(secondMac);
+        if (this.isConnected(firstMac)) {
+            throw `${firstMac} is already connected`;
         }
-        if (this.isConnected(b)) {
-            throw `${b} is already connected`;
+        if (this.isConnected(secondMac)) {
+            throw `${secondMac} is already connected`;
         }
-        if (indexA != indexB && indexA >= 0 && indexB >= 0) {
-            this._matrix[indexA][indexB] = 1;
-            this._matrix[indexB][indexA] = 1;
+        if (firstMac_idx != secondMac_idx && firstMac_idx >= 0 && secondMac_idx >= 0) {
+            this._matrix[firstMac_idx][secondMac_idx] = 1;
+            this._matrix[secondMac_idx][firstMac_idx] = 1;
         }
         else {
             throw `Invalid MAC Addresses`;
         }
-        this.printMatrix();
+    }
+
+    /** 
+     * Disconnects interface with given MAC address, and clears the device's forwarding table for routes
+     * associated with the given interface
+     * @param mac the MAC address of the interface to disconnect
+    */
+    public disconnect(mac: MacAddress) {
+
     }
 
     public link(...macs: MacAddress[]) {
@@ -139,6 +235,36 @@ class InterfaceMatrix {
         }
     }
 
+    public async send(frame: Frame, egress_mac: MacAddress): Promise<void> {
+        const sender_inf = this._list.itemFromId(egress_mac);
+        if (sender_inf === undefined) {
+            throw Error(`sender MAC ${frame.src_mac} does not belong to an interface`)
+        }
+
+        // if the sending interface has no neighbor, then simply return
+        if (!this.isConnected(egress_mac)) {
+            return;
+        }
+
+        const recipient_inf = this.getNeighborInf(egress_mac);
+        await recipient_inf.receive(frame, recipient_inf.mac);
+
+        // // if the frame is a broadcast frame, it doesn't matter what the neighboring interface is
+        // if (frame.dest_mac.isBroadcast()) {
+        //     const recipient_inf = this.getNeighborInf(frame.src_mac);
+        //     await recipient_inf.receive(frame, recipient_inf.mac);
+        // }
+        // else {
+        //     const recipient_inf = this._list.itemFromId(frame.dest_mac);
+        //     if (recipient_inf === undefined) {
+        //         throw Error(`recipient MAC ${frame.dest_mac} does not belong to an interface`)
+        //     }
+        //     if (this.areConnected(sender_inf.mac, recipient_inf.mac)) {
+        //         await recipient_inf.receive(frame, recipient_inf.mac);
+        //     }
+        // }
+    }
+
     private printMatrix() {
         console.log("---------------")
         for (var line of this._matrix) {
@@ -151,18 +277,20 @@ class InterfaceMatrix {
         console.log("---------------")
     }
 
-} export let InfMatrix = new InterfaceMatrix();
+}
 
+export const InfMatrix = new InterfaceMatrix(); 
 
 class Interface implements IdentifiedItem {
-    protected _mac: MacAddress;
+    protected readonly _mac: MacAddress;
     protected _status: InfStatus = InfStatus.UP;
     protected _vlan: number = null;
-    protected _layer: InfLayer;
-    protected _network_controller: NetworkController;
+    protected readonly _layer: InfLayer;
+    protected readonly _network_controller: NetworkController;
 
-    public constructor(network_controller: NetworkController) {
+    public constructor(network_controller: NetworkController, layer: InfLayer) {
         this._network_controller = network_controller;
+        this._layer = layer;
         let assigned = false;
         while (!assigned) {
             const mac = MacAddress.rand();
@@ -202,23 +330,31 @@ class Interface implements IdentifiedItem {
     public isUp(): boolean {
         return this._status == InfStatus.UP;
     }
+    
+    /**
+     * Sends a frame
+     * @param frame the frame to send
+     */
+    public async send(frame: Frame): Promise<void> {
+        console.log(`--> ${this._mac}: SE ${frame.src_mac} to ${frame.dest_mac}`)
+        await InfMatrix.send(frame, this._mac);
+    }
 
     /**
-     * Sends an ARP broadcast to find the MAC Address associated with a neighbor's IPv4 address
-     * @param ethertype the EtherType of the connection (is this needed?)
-     * @param ip the neighbor's IPv4 address
+     * Receives a frame
+     * @param frame the frame that is being received
      */
-    public async find(ethertype: EtherType, ip: Ipv4Address): Promise<MacAddress> {
-        // const broadcast_domain: Interface[] = InfMatrix.getBroadcastDomain(this._mac);
+    public async receive(frame: Frame, ingress_mac: MacAddress): Promise<void> {
+        console.log(`--> ${this._mac}: RE ${frame.src_mac} to ${frame.dest_mac}`)
+        await this._network_controller.receive(frame, ingress_mac);
     }
 }
 
 export class L2Interface extends Interface {
 
     public constructor(network_controller: NetworkController) {
-        super(network_controller);
+        super(network_controller, InfLayer.L2);
         this._vlan = 1;
-        this._layer = InfLayer.L2;
     }
 }
 
@@ -227,9 +363,10 @@ export class L3Interface extends Interface {
     private _ipv4_prefix: Ipv4Prefix;
     // private _ipv6: Ipv6Address; this won't work yet
 
-    public constructor(network_controller: NetworkController) {
-        super(network_controller);
-        this._layer = InfLayer.L3;
+    public constructor(network_controller: NetworkController, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0) {
+        super(network_controller, InfLayer.L3);
+        this._ipv4 = new Ipv4Address(ipv4_arr);
+        this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);
     }
 
     public set ipv4(ipv4: Ipv4Address) {
@@ -250,5 +387,24 @@ export class L3Interface extends Interface {
 
     public get ipv4_mask(): Ipv4Address {
         return this._ipv4_prefix.mask;
+    }
+
+    /**
+     * Sends an ARP broadcast to find the MAC Address associated with a neighbor's IPv4 address
+     * @param ethertype the EtherType of the connection (is this needed?)
+     * @param ip the neighbor's IPv4 address
+     */
+    // Note: should this function return anything? or should it just send the ARP request?
+    /**
+     * I'm leaning towards not returning any valid (or at least, not returning the received packet),
+     * since I'd like for the frame sending/receiving mechanisms to be totally stateless (or as
+     * stateless as possible, anyway).
+     * The return value for the sending function should therefore be irrelevant to the frame sent.
+     */
+    public async find(ip: Ipv4Address): Promise<boolean> {
+        const arppacket = new ArpPacket(OP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
+        const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
+        await this.send(frame);
+        return true;
     }
 }

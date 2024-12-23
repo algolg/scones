@@ -124,11 +124,8 @@ class Uint8 {
 }
 class MacAddress {
     constructor(arr) {
-        this._value = new Uint8Array(6);
-        this._value = this._value.map((ele, idx) => (ele = arr[idx]));
-    }
-    get value() {
-        return new Uint8Array(this._value);
+        this.value = new Uint8Array(6);
+        this.value = this.value.map((ele, idx) => (ele = arr[idx]));
     }
     static get byteLength() {
         return 6;
@@ -162,14 +159,17 @@ class MacAddress {
         }
         return 0;
     }
+    isBroadcast() {
+        return this.compare(MacAddress.broadcast) == 0;
+    }
     toBinary() {
-        return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");
+        return Array.from(this.value).map((x) => (x).toString(2).padStart(8, "0")).join("");
     }
     toArray() {
-        return this._value.toArray();
+        return this.value.toArray();
     }
     toString() {
-        return Array.from(this._value).map((x) => (x).toString(16).padStart(2, "0")).join(":");
+        return Array.from(this.value).map((x) => (x).toString(16).padStart(2, "0")).join(":");
     }
 }
 exports.MacAddress = MacAddress;
@@ -184,7 +184,7 @@ class Ipv4Address {
     get value() {
         return new Uint8Array(this._value);
     }
-    get etherType() {
+    get ethertype() {
         return frame_1.EtherType.IPv4;
     }
     static get byteLength() {

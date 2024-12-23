@@ -7,16 +7,16 @@ enum HTYPE { ETHERNET = 1 }
 export enum OP { REQUEST = 1, REPLY };
 
 export class ArpPacket implements Packet {
-    private _htype: HTYPE;
-    private _ptype: EtherType;
-    private _hlen = MacAddress.byteLength;
-    private _plen = Ipv4Address.byteLength;
-    private _op: OP;
-    private _src_ha: MacAddress;
-    private _src_pa: Ipv4Address;
-    private _dest_ha: MacAddress;
-    private _dest_pa: Ipv4Address;
-    private _packet: Uint8Array;
+    private readonly _htype: HTYPE;
+    private readonly _ptype: EtherType;
+    private readonly _hlen = MacAddress.byteLength;
+    private readonly _plen = Ipv4Address.byteLength;
+    private readonly _op: OP;
+    private readonly _src_ha: MacAddress;
+    private readonly _src_pa: Ipv4Address;
+    private readonly _dest_ha: MacAddress;
+    private readonly _dest_pa: Ipv4Address;
+    private readonly _packet: Uint8Array;
     private static _lengths: number[] = [16, 16, 8, 8, 16, 48, 32, 48, 32];
 
     public constructor(op: OP, src_ha: MacAddress, src_pa: Ipv4Address, dest_ha: MacAddress = MacAddress.broadcast, dest_pa: Ipv4Address) {
@@ -46,19 +46,19 @@ export class ArpPacket implements Packet {
     }
 
     public get src_ha(): MacAddress {
-        return this.src_ha;
+        return this._src_ha;
     }
 
     public get src_pa(): Ipv4Address {
-        return this.src_pa;
+        return this._src_pa;
     }
 
     public get dest_ha(): MacAddress {
-        return this.dest_ha;
+        return this._dest_ha;
     }
 
     public get dest_pa(): Ipv4Address {
-        return this.dest_pa;
+        return this._dest_pa;
     }
 
     public get packet(): Uint8Array {
@@ -97,16 +97,17 @@ export class ArpTable {
     private _table: Map<[EtherType, GeneralIpAddress],[MacAddress, MacAddress]> = new Map();
 
     public set(ip: GeneralIpAddress, remote_mac: MacAddress, local_mac: MacAddress) {
-        this._table.set([ip.etherType, ip], [remote_mac, local_mac]);
+        console.log(`!! ${local_mac}: adding ${ip} (${remote_mac}) to my ARP table`)
+        this._table.set([ip.ethertype, ip], [remote_mac, local_mac]);
     }
     public delete(ip: GeneralIpAddress): boolean {
-        return this._table.delete([ip.etherType, ip]);
+        return this._table.delete([ip.ethertype, ip]);
     }
     public get(ip: GeneralIpAddress): [MacAddress, MacAddress] {
-        return this._table.get([ip.etherType, ip]);
+        return this._table.get([ip.ethertype, ip]);
     }
     public has(ip: GeneralIpAddress): boolean {
-        return this._table.has([ip.etherType, ip]);
+        return this._table.has([ip.ethertype, ip]);
     }
 
 }

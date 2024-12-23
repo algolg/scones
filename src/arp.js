@@ -38,16 +38,16 @@ class ArpPacket {
         return this._op;
     }
     get src_ha() {
-        return this.src_ha;
+        return this._src_ha;
     }
     get src_pa() {
-        return this.src_pa;
+        return this._src_pa;
     }
     get dest_ha() {
-        return this.dest_ha;
+        return this._dest_ha;
     }
     get dest_pa() {
-        return this.dest_pa;
+        return this._dest_pa;
     }
     get packet() {
         return this._packet;
@@ -84,16 +84,17 @@ class ArpTable {
         this._table = new Map();
     }
     set(ip, remote_mac, local_mac) {
-        this._table.set([ip.etherType, ip], [remote_mac, local_mac]);
+        console.log(`!! ${local_mac}: adding ${ip} (${remote_mac}) to my ARP table`);
+        this._table.set([ip.ethertype, ip], [remote_mac, local_mac]);
     }
     delete(ip) {
-        return this._table.delete([ip.etherType, ip]);
+        return this._table.delete([ip.ethertype, ip]);
     }
     get(ip) {
-        return this._table.get([ip.etherType, ip]);
+        return this._table.get([ip.ethertype, ip]);
     }
     has(ip) {
-        return this._table.has([ip.etherType, ip]);
+        return this._table.has([ip.ethertype, ip]);
     }
 }
 exports.ArpTable = ArpTable;

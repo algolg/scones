@@ -100,15 +100,15 @@ export interface Identifier {
 }
 
 export class DeviceID implements Identifier {
-    private _value: number;
-    private static min = 100000000;
-    private static max = 1000000000;
+    private readonly _value: number;
+    private static readonly min = 100000000;
+    private static readonly max = 1000000000;
 
     public constructor(value: number) {
         this._value = value;
     }
 
-    public static rand() {
+    public static rand(): number {
         return Math.floor(Math.random() * (this.max - this.min)) + this.min;
     }
 
@@ -146,14 +146,10 @@ class Uint8 {
 }
 
 export class MacAddress implements Identifier {
-    private _value = new Uint8Array(6);
+    readonly value = new Uint8Array(6);
 
     public constructor(arr: [number, number, number, number, number, number]) {
-        this._value = this._value.map((ele, idx) => (ele = arr[idx]));
-    }
-
-    public get value(): Uint8Array {
-        return new Uint8Array(this._value);
+        this.value = this.value.map((ele, idx) => (ele = arr[idx]));
     }
 
     public static get byteLength() {
@@ -192,22 +188,26 @@ export class MacAddress implements Identifier {
         return 0;
     }
 
+    public isBroadcast(): boolean {
+        return this.compare(MacAddress.broadcast) == 0;
+    }
+
     public toBinary(): string {
-        return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");
+        return Array.from(this.value).map((x) => (x).toString(2).padStart(8, "0")).join("");
     }
 
     public toArray(): number[] {
-        return this._value.toArray();
+        return this.value.toArray();
     }
 
     toString() {
-        return Array.from(this._value).map((x) => (x).toString(16).padStart(2, "0")).join(":");
+        return Array.from(this.value).map((x) => (x).toString(16).padStart(2, "0")).join(":");
     }
 }
 
 export interface GeneralIpAddress {
     get value(): Uint8Array;
-    get etherType(): EtherType;
+    get ethertype(): EtherType;
     toBinary(): string;
     toArray(): number[];
     toString(): string;
@@ -228,7 +228,7 @@ export class Ipv4Address implements GeneralIpAddress {
         return new Uint8Array(this._value);
     }
 
-    public get etherType(): Readonly<EtherType> {
+    public get ethertype(): EtherType {
         return EtherType.IPv4;
     }
 

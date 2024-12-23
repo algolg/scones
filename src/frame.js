@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SentFrame = exports.Frame = exports.EtherType = void 0;
+exports.Frame = exports.EtherType = void 0;
 const addressing_1 = require("./addressing");
 var EtherType;
 (function (EtherType) {
@@ -21,9 +21,9 @@ class Frame {
             ...this._packet.toArray(),
             0, 0, 0, 0
         ]);
-        const fcs = this.calculateFCS();
+        this._fcs = new Uint8Array(this.calculateFCS());
         for (let i = 0; i < 4; i++) {
-            this._frame[this._frame.length - 4 + i] = fcs[i];
+            this._frame[this._frame.length - 4 + i] = this._fcs[i];
         }
     }
     get packet() {
@@ -48,7 +48,6 @@ class Frame {
             }
         }
         crc ^= 0xFFFFFFFF;
-        console.log((crc >>> 0).toString(16));
         return (0, addressing_1.spread)([crc >>> 0, 32]);
     }
     printFrame() {
@@ -56,22 +55,4 @@ class Frame {
     }
 }
 exports.Frame = Frame;
-class SentFrame {
-    /**
-     * Creates a SentFrame object
-     * @param frame the Frame which is being sent
-     * @param ingress_mac the MAC address of the receiving interface
-     */
-    constructor(frame, ingress_mac) {
-        this._frame = frame;
-        this._ingress_mac = ingress_mac;
-    }
-    get frame() {
-        return this._frame;
-    }
-    get ingress_mac() {
-        return this._ingress_mac;
-    }
-}
-exports.SentFrame = SentFrame;
 //# sourceMappingURL=frame.js.map

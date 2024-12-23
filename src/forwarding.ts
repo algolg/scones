@@ -1,25 +1,29 @@
 import { MacAddress } from "./addressing";
 
 export class ForwardingInformationBase {
-    private _table: Map<MacAddress, MacAddress> = new Map();
+    private _table: Map<string, MacAddress> = new Map();
     
     public set(destination: MacAddress, egress: MacAddress) {
-        this._table.set(destination, egress);
+        console.log(`** ${egress}: adding ${destination} to my forwarding table`)
+        if (egress.compare(destination) != 0) {
+            this._table.set(destination.toString(), egress);
+        }
     }
     public delete(destination: MacAddress): boolean {
-        return this._table.delete(destination);
+        return this._table.delete(destination.toString());
     }
-    public get(destination: MacAddress): Readonly<MacAddress> {
-        return this._table.get(destination);
+    public get(destination: MacAddress): MacAddress {
+        return this._table.get(destination.toString());
     }
     public has(destination: MacAddress): boolean {
-        return this._table.has(destination)
+        console.log(`** ${destination} is in my forwarding table`)
+        return this._table.has(destination.toString());
     }
 
-    public find(egress: MacAddress): Readonly<MacAddress>[] {
+    public find(egress: MacAddress): MacAddress[] {
         let macs: MacAddress[] = [];
         for (let entry of this._table.entries()) {
-            if (entry[0].compare(egress) == 1) {
+            if (entry[0] === egress.toString()) {
                 macs.push(entry[1]);
             }
         }
