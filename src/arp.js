@@ -83,18 +83,33 @@ class ArpTable {
     constructor() {
         this._table = new Map();
     }
+    keyToString(ethertype, ip) {
+        return `${ethertype}${ip}`;
+    }
     set(ip, remote_mac, local_mac) {
         console.log(`!! ${local_mac}: adding ${ip} (${remote_mac}) to my ARP table`);
-        this._table.set([ip.ethertype, ip], [remote_mac, local_mac]);
+        this._table.set(this.keyToString(ip.ethertype, ip), [remote_mac, local_mac]);
     }
     delete(ip) {
-        return this._table.delete([ip.ethertype, ip]);
+        return this._table.delete(this.keyToString(ip.ethertype, ip));
     }
     get(ip) {
-        return this._table.get([ip.ethertype, ip]);
+        return this._table.get(this.keyToString(ip.ethertype, ip));
     }
     has(ip) {
-        return this._table.has([ip.ethertype, ip]);
+        return this._table.has(this.keyToString(ip.ethertype, ip));
+    }
+    clearValue(egress) {
+        let toClear = [];
+        for (let [key, value] of this._table.entries()) {
+            if (value[1].compare(egress) == 0) {
+                toClear.push(key);
+            }
+        }
+        for (let destination of toClear) {
+            this._table.delete(destination);
+        }
+        return toClear.length;
     }
 }
 exports.ArpTable = ArpTable;

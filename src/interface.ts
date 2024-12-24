@@ -110,7 +110,7 @@ class InterfaceMatrix {
     }
 
     // private this later
-    public get list(): IdentifiedList<Interface> {
+    private get list(): IdentifiedList<Interface> {
         return this._list;
     }
 
@@ -147,7 +147,7 @@ class InterfaceMatrix {
      * @param mac the MAC address of the interface to check
      * @returns true if the interface is connected to some other interface, false otherwise
      */
-    private isConnected(mac: MacAddress): boolean {
+    public isConnected(mac: MacAddress): boolean {
         return this.getRow(mac).some((x) => x == 1);
     }
 
@@ -196,15 +196,15 @@ class InterfaceMatrix {
      * @param secondMac the MAC address of the second interface
      */
     public connect(firstMac: MacAddress, secondMac: MacAddress) {
-        const firstMac_idx = this._list.indexOfId(firstMac);
-        const secondMac_idx = this._list.indexOfId(secondMac);
         if (this.isConnected(firstMac)) {
             throw `${firstMac} is already connected`;
         }
         if (this.isConnected(secondMac)) {
             throw `${secondMac} is already connected`;
         }
-        if (firstMac_idx != secondMac_idx && firstMac_idx >= 0 && secondMac_idx >= 0) {
+        const firstMac_idx = this._list.indexOfId(firstMac);
+        const secondMac_idx = this._list.indexOfId(secondMac);
+        if (firstMac_idx != secondMac_idx && firstMac_idx >= 0 && secondMac_idx >= 0 && this._matrix[firstMac_idx][secondMac_idx] == 0) {
             this._matrix[firstMac_idx][secondMac_idx] = 1;
             this._matrix[secondMac_idx][firstMac_idx] = 1;
         }
@@ -214,12 +214,24 @@ class InterfaceMatrix {
     }
 
     /** 
-     * Disconnects interface with given MAC address, and clears the device's forwarding table for routes
-     * associated with the given interface
-     * @param mac the MAC address of the interface to disconnect
+     * Disconnects two interfaces and clears the devices' forwarding table for routes associated with the given interfaces
+     * @param firstMac the MAC address of the first interface
+     * @param secondMac the MAC address of the second interface
     */
-    public disconnect(mac: MacAddress) {
-
+    public disconnect(firstMac: MacAddress, secondMac: MacAddress) {
+        const firstMac_idx = this._list.indexOfId(firstMac);
+        const secondMac_idx = this._list.indexOfId(secondMac);
+        if (firstMac_idx != secondMac_idx && firstMac_idx >= 0 && secondMac_idx >= 0 && this._matrix[firstMac_idx][secondMac_idx] == 1) {
+            this._matrix[firstMac_idx][secondMac_idx] = 0;
+            this._matrix[secondMac_idx][firstMac_idx] = 0;
+            const firstInf = this._list.itemFromId(firstMac);
+            const secondInf = this._list.itemFromId(secondMac);
+            firstInf.clearFib();
+            secondInf.clearFib();
+        }
+        else {
+            throw `Invalid MAC Addresses`;
+        }
     }
 
     public link(...macs: MacAddress[]) {
@@ -328,7 +340,7 @@ class Interface implements IdentifiedItem {
     }
 
     public isUp(): boolean {
-        return this._status == InfStatus.UP;
+        return this._status == InfStatus.UP && InfMatrix.isConnected(this._mac);
     }
     
     /**
@@ -347,6 +359,10 @@ class Interface implements IdentifiedItem {
     public async receive(frame: Frame, ingress_mac: MacAddress): Promise<void> {
         console.log(`--> ${this._mac}: RE ${frame.src_mac} to ${frame.dest_mac}`)
         await this._network_controller.receive(frame, ingress_mac);
+    }
+
+    public clearFib() {
+        this._network_controller.clearFib(this._mac);
     }
 }
 
@@ -401,10 +417,15 @@ export class L3Interface extends Interface {
      * stateless as possible, anyway).
      * The return value for the sending function should therefore be irrelevant to the frame sent.
      */
-    public async find(ip: Ipv4Address): Promise<boolean> {
+    /**
+     * Also consider whether this function should be async. If it should, remove the setTimeout()
+     */
+    public find(ip: Ipv4Address): boolean {
         const arppacket = new ArpPacket(OP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
         const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
-        await this.send(frame);
+        setTimeout(() => {
+            this.send(frame);
+        }, 0)
         return true;
     }
 }

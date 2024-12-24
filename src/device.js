@@ -30,7 +30,14 @@ class Device {
     compare(other) {
         return this._id.compare(other._id);
     }
-    encapsulate(packet) {
+    clearFib(mac) {
+        if (!this.hasInf(mac)) {
+            throw Error(`Device does not have MAC address ${mac}`);
+        }
+        this._forwarding_table.clearValue(mac);
+        this._arp_table.clearValue(mac);
+    }
+    encapsulateAndSend(packet) {
         const ipv4_dest = packet.dest;
         for (let l3inf of this._l3infs) {
             // check if the subnets match
@@ -50,16 +57,34 @@ class Device {
                      * the packet is cached and sent immediately after the ARP request's
                      * resolution.
                      */
-                    l3inf.find(ipv4_dest).then(() => {
-                        const mac = this._arp_table.get(ipv4_dest)[0];
-                        if (mac !== undefined) {
-                            /**
-                             * current plan: the find function should also add that MAC to the ArpTable
-                             * although maybe i'll change my mind
-                             */
-                            return new frame_js_1.Frame(mac, l3inf.mac, frame_js_1.EtherType.IPv4, packet.packet);
-                        }
-                    });
+                    /**
+                     * I'm now rethinking this interpretation, and might like to instead have
+                     * the function run the find() function, check every ~500ms if the MAC
+                     * address has arrived, and send the frame when it does. If it takes more
+                     * than 5s, then don't send anything and return false.
+                     */
+                    /**
+                     * More rethinking. The Internet never guarantees packet delivery. The
+                     * application must resend packets on fail.
+                     *
+                     * For example, ping will run encapsulteAndSend(icmp_request) once every
+                     * second. Ping (i.e., the application itself) should decide the interval
+                     * between requests and how many to send before ending. This function
+                     * does not make any guarantees.
+                     *
+                     * This function will try to get the destination MAC from the ARP table.
+                     * If mac === undefined, run find() to try to populate the ARP table, but
+                     * do not send any frame. Instead, return false to indicate that a frame
+                     * was not sent.
+                     *
+                     * This function may need to be renamed to tryEncapsulateAndSend
+                     */
+                    // l3inf.find(ipv4_dest).then(() => {
+                    //     const mac = this._arp_table.get(ipv4_dest)[0];
+                    //     if (mac !== undefined) {
+                    //         return new Frame(mac, l3inf.mac, EtherType.IPv4, packet.packet);
+                    //     }
+                    // });
                 }
             }
         }
@@ -107,11 +132,14 @@ class Device {
             switch (ethertype) {
                 case frame_js_1.EtherType.ARP:
                     const packet = arp_js_1.ArpPacket.parsePacket(frame.packet);
-                    setTimeout(() => {
-                        this.processARP(packet, ingress_mac, [should_forward]);
+                    setTimeout(async () => {
+                        await this.processARP(packet, ingress_mac, [should_forward]);
                     }, 10);
                     break;
                 case frame_js_1.EtherType.IPv4:
+                    setTimeout(() => {
+                        // this.processIpv4(...)
+                    }, 10);
                     break;
                 case frame_js_1.EtherType.IPv6:
                 default:
@@ -119,7 +147,11 @@ class Device {
             }
         }
         if (should_forward) {
-            this.forward(frame, ingress_mac);
+            // does this setTimeout make a difference? test it out in more complex networks
+            // (networks with many opportunities for switches to make extra broadcasts)
+            setTimeout(async () => {
+                await this.forward(frame, ingress_mac);
+            }, 10);
         }
         return true;
     }
@@ -127,16 +159,17 @@ class Device {
         if (ingress_inf === undefined) {
             throw Error("Interface does not exist");
         }
-        const broadcast_domain = this._l2infs.filter((x) => x.vlan == ingress_inf.vlan && x.mac.compare(ingress_inf.mac) != 0);
+        // valid interfaces are up (on and connected to), not the same as the ingress, and have the same VLAN as the ingress
+        const broadcast_domain = this._l2infs.filter((x) => x.isUp() && x.mac.compare(ingress_inf.mac) != 0 && x.vlan == ingress_inf.vlan);
         for (let inf of broadcast_domain) {
-            console.log(`forwarding from ${inf.mac}`);
+            console.log(`broadcast - forwarding from ${inf.mac}`);
             await inf.send(frame);
         }
     }
     async forward(frame, ingress_mac) {
         const dest_mac = frame.dest_mac;
         const ingress_inf = this.getInf(ingress_mac);
-        if (ingress_inf == undefined) {
+        if (ingress_inf === undefined) {
             throw Error("Interface does not exist");
         }
         // if dest_mac is broadcast, send to all non-ingress frames in the same broadcast domain
@@ -145,7 +178,10 @@ class Device {
         }
         // otherwise, if the destination MAC is in the forwarding table, forward out of that interface
         else if (this._forwarding_table.has(dest_mac)) {
-            await this.getInf(this._forwarding_table.get(dest_mac)).send(frame);
+            const egress_inf = this.getInf(this._forwarding_table.get(dest_mac));
+            if (egress_inf.isUp()) {
+                await egress_inf.send(frame);
+            }
         }
         // otherwise, frame gets dropped
     }
@@ -164,7 +200,7 @@ class Device {
                 this._arp_table.set(arp_request.src_pa, arp_request.src_ha, ingress_mac);
             }
             if (op == arp_js_1.OP.REQUEST) {
-                console.log(`${this._l3infs[0].mac}: RE for ARP`);
+                console.log(`${this._l3infs[0].mac}: replying for ARP`);
                 should_forward[0] = false;
                 const arp_reply = arp_request.makeReply(try_inf.mac);
                 const frame = new frame_js_1.Frame(arp_reply.dest_ha, try_inf.mac, frame_js_1.EtherType.ARP, arp_reply.packet);
@@ -187,7 +223,10 @@ class NetworkController {
      * @param frame the frame to process
      */
     async receive(frame, ingress_mac) {
-        this._device.receive(frame, ingress_mac);
+        await this._device.receive(frame, ingress_mac);
+    }
+    clearFib(mac) {
+        this._device.clearFib(mac);
     }
 }
 exports.NetworkController = NetworkController;
@@ -222,19 +261,42 @@ class Switch extends Device {
         return this._l2infs;
     }
 }
-function main() {
+async function main() {
     const pc1 = new PersonalComputer();
     const pc2 = new PersonalComputer();
-    const sw1 = new Switch(2);
+    const pc3 = new PersonalComputer();
+    const sw1 = new Switch(5);
+    const sw2 = new Switch(5);
     pc1.ipv4 = [192, 168, 0, 10];
     pc2.ipv4 = [192, 168, 0, 20];
     console.log(`pc1:\t${pc1.inf.mac}`);
     console.log(`sw1[0]:\t${sw1.l2infs[0].mac}`);
     console.log(`sw1[1]:\t${sw1.l2infs[1].mac}`);
+    console.log(`sw1[2]:\t${sw1.l2infs[2].mac}`);
+    console.log(`sw2[0]:\t${sw2.l2infs[0].mac}`);
+    console.log(`sw2[1]:\t${sw2.l2infs[1].mac}`);
     console.log(`pc2:\t${pc2.inf.mac}`);
+    console.log(`pc3:\t${pc3.inf.mac}`);
     interface_js_1.InfMatrix.connect(pc1.inf.mac, sw1.l2infs[0].mac);
-    interface_js_1.InfMatrix.connect(pc2.inf.mac, sw1.l2infs[1].mac);
+    interface_js_1.InfMatrix.connect(sw1.l2infs[1].mac, sw2.l2infs[0].mac);
+    interface_js_1.InfMatrix.connect(pc3.inf.mac, sw1.l2infs[2].mac);
+    interface_js_1.InfMatrix.connect(sw2.l2infs[1].mac, pc2.inf.mac);
     pc1.inf.find(pc2.ipv4);
+    let i = 0;
+    let check;
+    check = pc1._arp_table.has(pc2.ipv4);
+    console.log(`--> !!!!! ${check}`);
+    i++;
+    const waiting = setInterval(() => {
+        if (check || i >= 5) {
+            clearInterval(waiting);
+        }
+        else {
+            check = pc1._arp_table.has(pc2.ipv4);
+            console.log(`--> !!!!! ${check}`);
+            i++;
+        }
+    }, 1000);
 }
 main();
 //# sourceMappingURL=device.js.map

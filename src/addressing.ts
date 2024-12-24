@@ -33,6 +33,25 @@ Uint8Array.prototype.toBigInt = function(): bigint {
     return num;
 }
 
+// https://evanhahn.com/the-best-way-to-concatenate-uint8arrays/
+/**
+ * Concatenates multiple Uint8Arrays
+ * @param uint8arrays the arrays to concatenate
+ * @returns Concatenated Uint8Array
+ */
+export function concat(...uint8arrays: Uint8Array[]): Uint8Array {
+    const totalLength = uint8arrays.reduce(
+        (total, uint8array) => total + uint8array.byteLength, 0
+    );
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    uint8arrays.forEach((uint8array) => {
+        result.set(uint8array, offset);
+        offset += uint8array.byteLength;
+    });
+    return result;
+}
+
 export function spread(...pairs: [number, number][]): number[] {
     const values: number[] = pairs.map(x => x[0]);
     const bits: number[] = pairs.map(x => x[1]);
@@ -70,18 +89,6 @@ export function spread(...pairs: [number, number][]): number[] {
     }
     return output;
 }
-export function divide_old(arr: Uint8Array, divisions: number[]): number[] {
-    const split = arr.toBinary().split('').reverse();
-    let output: number[] = [];
-    for (let division of divisions) {
-        let str = "";
-        for (let i=0; i<division; i++) {
-            str += split.pop();
-        }
-        output.push(parseInt(str, 2));
-    }
-    return output;
-}
 export function divide(arr: Uint8Array, divisions: number[]): number[] {
     let num = arr.toBigInt();
     let bits_remaining = arr.length * 8;
@@ -91,7 +98,23 @@ export function divide(arr: Uint8Array, divisions: number[]): number[] {
         output.push(Number(num / BigInt(2**bits_remaining)));
         num &= BigInt(2**bits_remaining) - BigInt(1);
     }
+    if (bits_remaining > 0) {
+        let remaining_divisions = Array<number>(Math.ceil(bits_remaining/8)).fill(8);
+        const last_division = bits_remaining % 8;
+        remaining_divisions[remaining_divisions.length - 1] = last_division == 0 ? 8 : last_division;
+        for (let division of remaining_divisions) {
+            bits_remaining = Math.max(bits_remaining-division, 0);
+            output.push(Number(num / BigInt(2**bits_remaining)));
+            num &= BigInt(2**bits_remaining) - BigInt(1);
+        }
+    }
     return output;
+}
+export function limit(num: number, bits: number): number {
+    return num & (2**bits - 1)
+}
+export function padTo32BitWords(arr: number[]): number[] {
+    return Array<number>(Math.ceil(arr.length / 4) * 4 - arr.length).fill(0).concat(arr).slice(0,40)
 }
 
 export interface Identifier {
@@ -309,3 +332,6 @@ function main() {
     console.log(`${testuint8array}\t\t${testuint8array.toBinary()}`)
 }
 // main();
+
+let a = new Uint8Array([16,16,16,16,128,255]);
+console.log(divide(a, [8,8,8,9]));

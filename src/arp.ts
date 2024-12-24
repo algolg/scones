@@ -17,7 +17,7 @@ export class ArpPacket implements Packet {
     private readonly _dest_ha: MacAddress;
     private readonly _dest_pa: Ipv4Address;
     private readonly _packet: Uint8Array;
-    private static _lengths: number[] = [16, 16, 8, 8, 16, 48, 32, 48, 32];
+    private static readonly _lengths: number[] = [16, 16, 8, 8, 16, 48, 32, 48, 32];
 
     public constructor(op: OP, src_ha: MacAddress, src_pa: Ipv4Address, dest_ha: MacAddress = MacAddress.broadcast, dest_pa: Ipv4Address) {
         this._htype = HTYPE.ETHERNET;
@@ -94,20 +94,37 @@ export class ArpPacket implements Packet {
 }
 
 export class ArpTable {
-    private _table: Map<[EtherType, GeneralIpAddress],[MacAddress, MacAddress]> = new Map();
+    private _table: Map<string,[MacAddress, MacAddress]> = new Map();
+
+    private keyToString(ethertype: EtherType, ip: GeneralIpAddress): string {
+        return `${ethertype}${ip}`;
+    }
 
     public set(ip: GeneralIpAddress, remote_mac: MacAddress, local_mac: MacAddress) {
         console.log(`!! ${local_mac}: adding ${ip} (${remote_mac}) to my ARP table`)
-        this._table.set([ip.ethertype, ip], [remote_mac, local_mac]);
+        this._table.set(this.keyToString(ip.ethertype, ip), [remote_mac, local_mac]);
     }
     public delete(ip: GeneralIpAddress): boolean {
-        return this._table.delete([ip.ethertype, ip]);
+        return this._table.delete(this.keyToString(ip.ethertype, ip));
     }
     public get(ip: GeneralIpAddress): [MacAddress, MacAddress] {
-        return this._table.get([ip.ethertype, ip]);
+        return this._table.get(this.keyToString(ip.ethertype, ip));
     }
     public has(ip: GeneralIpAddress): boolean {
-        return this._table.has([ip.ethertype, ip]);
+        return this._table.has(this.keyToString(ip.ethertype, ip));
+    }
+
+    public clearValue(egress: MacAddress): number {
+        let toClear: string[] = [];
+        for (let [key, value] of this._table.entries()) {
+            if (value[1].compare(egress) == 0) {
+                toClear.push(key);
+            }
+        }
+        for (let destination of toClear) {
+            this._table.delete(destination);
+        }
+        return toClear.length;
     }
 
 }

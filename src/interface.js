@@ -177,15 +177,15 @@ class InterfaceMatrix {
      * @param secondMac the MAC address of the second interface
      */
     connect(firstMac, secondMac) {
-        const firstMac_idx = this._list.indexOfId(firstMac);
-        const secondMac_idx = this._list.indexOfId(secondMac);
         if (this.isConnected(firstMac)) {
             throw `${firstMac} is already connected`;
         }
         if (this.isConnected(secondMac)) {
             throw `${secondMac} is already connected`;
         }
-        if (firstMac_idx != secondMac_idx && firstMac_idx >= 0 && secondMac_idx >= 0) {
+        const firstMac_idx = this._list.indexOfId(firstMac);
+        const secondMac_idx = this._list.indexOfId(secondMac);
+        if (firstMac_idx != secondMac_idx && firstMac_idx >= 0 && secondMac_idx >= 0 && this._matrix[firstMac_idx][secondMac_idx] == 0) {
             this._matrix[firstMac_idx][secondMac_idx] = 1;
             this._matrix[secondMac_idx][firstMac_idx] = 1;
         }
@@ -194,11 +194,24 @@ class InterfaceMatrix {
         }
     }
     /**
-     * Disconnects interface with given MAC address, and clears the device's forwarding table for routes
-     * associated with the given interface
-     * @param mac the MAC address of the interface to disconnect
+     * Disconnects two interfaces and clears the devices' forwarding table for routes associated with the given interfaces
+     * @param firstMac the MAC address of the first interface
+     * @param secondMac the MAC address of the second interface
     */
-    disconnect(mac) {
+    disconnect(firstMac, secondMac) {
+        const firstMac_idx = this._list.indexOfId(firstMac);
+        const secondMac_idx = this._list.indexOfId(secondMac);
+        if (firstMac_idx != secondMac_idx && firstMac_idx >= 0 && secondMac_idx >= 0 && this._matrix[firstMac_idx][secondMac_idx] == 1) {
+            this._matrix[firstMac_idx][secondMac_idx] = 0;
+            this._matrix[secondMac_idx][firstMac_idx] = 0;
+            const firstInf = this._list.itemFromId(firstMac);
+            const secondInf = this._list.itemFromId(secondMac);
+            firstInf.clearFib();
+            secondInf.clearFib();
+        }
+        else {
+            throw `Invalid MAC Addresses`;
+        }
     }
     link(...macs) {
         for (let i = 0; i < macs.length - 1; i++) {
@@ -289,7 +302,7 @@ class Interface {
         this._status = status;
     }
     isUp() {
-        return this._status == InfStatus.UP;
+        return this._status == InfStatus.UP && exports.InfMatrix.isConnected(this._mac);
     }
     /**
      * Sends a frame
@@ -306,6 +319,9 @@ class Interface {
     async receive(frame, ingress_mac) {
         console.log(`--> ${this._mac}: RE ${frame.src_mac} to ${frame.dest_mac}`);
         await this._network_controller.receive(frame, ingress_mac);
+    }
+    clearFib() {
+        this._network_controller.clearFib(this._mac);
     }
 }
 class L2Interface extends Interface {
@@ -349,10 +365,15 @@ class L3Interface extends Interface {
      * stateless as possible, anyway).
      * The return value for the sending function should therefore be irrelevant to the frame sent.
      */
-    async find(ip) {
+    /**
+     * Also consider whether this function should be async. If it should, remove the setTimeout()
+     */
+    find(ip) {
         const arppacket = new arp_1.ArpPacket(arp_1.OP.REQUEST, this._mac, this._ipv4, addressing_1.MacAddress.broadcast, ip);
         const frame = new frame_1.Frame(addressing_1.MacAddress.broadcast, this._mac, frame_1.EtherType.ARP, arppacket.packet);
-        await this.send(frame);
+        setTimeout(() => {
+            this.send(frame);
+        }, 0);
         return true;
     }
 }

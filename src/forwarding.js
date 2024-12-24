@@ -30,6 +30,18 @@ class ForwardingInformationBase {
         }
         return macs;
     }
+    clearValue(egress) {
+        let toClear = [];
+        for (let [key, value] of this._table.entries()) {
+            if (value.compare(egress) == 0) {
+                toClear.push(key);
+            }
+        }
+        for (let destination of toClear) {
+            this._table.delete(destination);
+        }
+        return toClear.length;
+    }
 }
 exports.ForwardingInformationBase = ForwardingInformationBase;
 //# sourceMappingURL=forwarding.js.map

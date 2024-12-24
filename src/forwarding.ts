@@ -29,4 +29,17 @@ export class ForwardingInformationBase {
         }
         return macs;
     }
+
+    public clearValue(egress: MacAddress): number {
+        let toClear: string[] = [];
+        for (let [key, value] of this._table.entries()) {
+            if (value.compare(egress) == 0) {
+                toClear.push(key);
+            }
+        }
+        for (let destination of toClear) {
+            this._table.delete(destination);
+        }
+        return toClear.length;
+    }
 }
