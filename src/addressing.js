@@ -112,16 +112,14 @@ function padTo32BitWords(arr) {
 exports.padTo32BitWords = padTo32BitWords;
 class DeviceID {
     constructor(value) {
-        this._value = value;
+        value = value > DeviceID.max ? DeviceID.max : value < DeviceID.min ? DeviceID.min : Math.trunc(value);
+        this.value = value;
     }
     static rand() {
         return Math.floor(Math.random() * (this.max - this.min)) + this.min;
     }
-    get value() {
-        return this._value;
-    }
     compare(other) {
-        return this._value - other._value;
+        return this.value - other.value;
     }
 }
 exports.DeviceID = DeviceID;
@@ -270,6 +268,4 @@ function main() {
     console.log(`${testuint8array}\t\t${testuint8array.toBinary()}`);
 }
 // main();
-let a = new Uint8Array([16, 16, 16, 16, 128, 255]);
-console.log(divide(a, [8, 8, 8, 9]));
 //# sourceMappingURL=addressing.js.map

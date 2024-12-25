@@ -28,11 +28,7 @@ class Ipv4Packet {
         this._data = data;
         this._ihl = 5 + Math.trunc(this._options.length / 4);
         this._total_length = (this._ihl * 8) + this._data.length;
-        let header = new Uint8Array([
-            ...(0, addressing_1.spread)([this._version, Ipv4Packet._lengths[0]], [this._ihl, Ipv4Packet._lengths[1]], [this._dscp, Ipv4Packet._lengths[2]], [this._ecn, Ipv4Packet._lengths[3]], [this._total_length, Ipv4Packet._lengths[4]], [this._identification, Ipv4Packet._lengths[5]], [this._flags, Ipv4Packet._lengths[6]], [this._fragment_offset, Ipv4Packet._lengths[7]], [this._ttl, Ipv4Packet._lengths[8]], [this._protocol, Ipv4Packet._lengths[9]]),
-            ...this._header_checksum,
-            ...this._src.toArray(), ...this._dest.toArray()
-        ]);
+        let header = this.header;
         this._header_checksum = new Uint8Array((0, addressing_1.spread)([Ipv4Packet.calculateChecksum(header), 16]));
         for (let i = 0; i < 2; i++) {
             header[i + Ipv4Packet._bytes_before_checksum] = this._header_checksum[i];
@@ -45,6 +41,9 @@ class Ipv4Packet {
     get ecn() {
         return this._ecn;
     }
+    get protocol() {
+        return this._protocol;
+    }
     get src() {
         return this._src;
     }
@@ -56,6 +55,13 @@ class Ipv4Packet {
     }
     get packet_length() {
         return this._packet.length;
+    }
+    get header() {
+        return new Uint8Array([
+            ...(0, addressing_1.spread)([this._version, Ipv4Packet._lengths[0]], [this._ihl, Ipv4Packet._lengths[1]], [this._dscp, Ipv4Packet._lengths[2]], [this._ecn, Ipv4Packet._lengths[3]], [this._total_length, Ipv4Packet._lengths[4]], [this._identification, Ipv4Packet._lengths[5]], [this._flags, Ipv4Packet._lengths[6]], [this._fragment_offset, Ipv4Packet._lengths[7]], [this._ttl, Ipv4Packet._lengths[8]], [this._protocol, Ipv4Packet._lengths[9]]),
+            ...this._header_checksum,
+            ...this._src.toArray(), ...this._dest.toArray()
+        ]);
     }
     static onesComplement16Bits(num) {
         return (~num >>> 0) & 0xFFFF;
@@ -71,6 +77,9 @@ class Ipv4Packet {
         }
         return Ipv4Packet.onesComplement16Bits(sum);
     }
+    static verifyChecksum(packet) {
+        return this.calculateChecksum(packet.header) == 0;
+    }
     static parsePacket(packet) {
         const divided = (0, addressing_1.divide)(packet, Ipv4Packet._lengths);
         const ihl = divided[1];
@@ -83,6 +92,9 @@ class Ipv4Packet {
         const options = divided.slice(Ipv4Packet._bytes_before_options, ihl * 4);
         const data = new Uint8Array(divided.slice(ihl * 4));
         return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data);
+    }
+    static copyAndDecrement(packet, ttl_decrement = 1) {
+        return new Ipv4Packet(packet._dscp, packet._ecn, packet._ttl - ttl_decrement, packet._protocol, packet._src, packet._dest, packet._options.toArray(), packet._data);
     }
 }
 exports.Ipv4Packet = Ipv4Packet;

@@ -123,24 +123,21 @@ export interface Identifier {
 }
 
 export class DeviceID implements Identifier {
-    private readonly _value: number;
-    private static readonly min = 100000000;
-    private static readonly max = 1000000000;
+    readonly value: number;
+    private static readonly min: number = 100000000;
+    private static readonly max: number = 1000000000;
 
     public constructor(value: number) {
-        this._value = value;
+        value = value > DeviceID.max ? DeviceID.max : value < DeviceID.min ? DeviceID.min : Math.trunc(value);
+        this.value = value;
     }
 
     public static rand(): number {
         return Math.floor(Math.random() * (this.max - this.min)) + this.min;
     }
 
-    public get value() {
-        return this._value;
-    }
-
     public compare(other: DeviceID): number {
-        return this._value - other._value;
+        return this.value - other.value;
     }
 }
 
@@ -332,6 +329,3 @@ function main() {
     console.log(`${testuint8array}\t\t${testuint8array.toBinary()}`)
 }
 // main();
-
-let a = new Uint8Array([16,16,16,16,128,255]);
-console.log(divide(a, [8,8,8,9]));

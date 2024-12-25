@@ -38,18 +38,7 @@ export class Ipv4Packet implements Packet {
         this._ihl = 5 + Math.trunc(this._options.length / 4);
         this._total_length = (this._ihl * 8) + this._data.length;
 
-        let header = new Uint8Array([
-            ...spread(
-                [this._version, Ipv4Packet._lengths[0]], [this._ihl, Ipv4Packet._lengths[1]],
-                [this._dscp, Ipv4Packet._lengths[2]], [this._ecn, Ipv4Packet._lengths[3]],
-                [this._total_length, Ipv4Packet._lengths[4]], 
-                [this._identification, Ipv4Packet._lengths[5]],
-                [this._flags, Ipv4Packet._lengths[6]], [this._fragment_offset, Ipv4Packet._lengths[7]],
-                [this._ttl, Ipv4Packet._lengths[8]], [this._protocol, Ipv4Packet._lengths[9]],
-            ),
-            ...this._header_checksum,
-            ...this._src.toArray(), ...this._dest.toArray()
-        ])
+        let header = this.header;
         this._header_checksum = new Uint8Array(spread([Ipv4Packet.calculateChecksum(header), 16]));
         for (let i = 0; i < 2; i++) {
             header[i + Ipv4Packet._bytes_before_checksum] = this._header_checksum[i];
@@ -63,6 +52,10 @@ export class Ipv4Packet implements Packet {
 
     public get ecn(): number {
         return this._ecn;
+    }
+
+    public get protocol(): InternetProtocolNumbers {
+        return this._protocol;
     }
 
     public get src(): Ipv4Address {
@@ -81,6 +74,21 @@ export class Ipv4Packet implements Packet {
         return this._packet.length;
     }
 
+    private get header(): Uint8Array {
+        return new Uint8Array([
+            ...spread(
+                [this._version, Ipv4Packet._lengths[0]], [this._ihl, Ipv4Packet._lengths[1]],
+                [this._dscp, Ipv4Packet._lengths[2]], [this._ecn, Ipv4Packet._lengths[3]],
+                [this._total_length, Ipv4Packet._lengths[4]], 
+                [this._identification, Ipv4Packet._lengths[5]],
+                [this._flags, Ipv4Packet._lengths[6]], [this._fragment_offset, Ipv4Packet._lengths[7]],
+                [this._ttl, Ipv4Packet._lengths[8]], [this._protocol, Ipv4Packet._lengths[9]],
+            ),
+            ...this._header_checksum,
+            ...this._src.toArray(), ...this._dest.toArray()
+        ])
+    }
+
     private static onesComplement16Bits(num: number): number {
         return (~num >>> 0) & 0xFFFF;
     }
@@ -97,6 +105,10 @@ export class Ipv4Packet implements Packet {
         return Ipv4Packet.onesComplement16Bits(sum);
     }
 
+    public static verifyChecksum(packet: Ipv4Packet): boolean {
+        return this.calculateChecksum(packet.header) == 0;
+    }
+
     public static parsePacket(packet: Uint8Array): Ipv4Packet {
         const divided: number[] = divide(packet, Ipv4Packet._lengths);
         const ihl: number = divided[1];
@@ -109,5 +121,12 @@ export class Ipv4Packet implements Packet {
         const options: number[] = divided.slice(Ipv4Packet._bytes_before_options, ihl * 4);
         const data: Uint8Array = new Uint8Array(divided.slice(ihl * 4));
         return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data);
+    }
+
+    public static copyAndDecrement(packet: Ipv4Packet, ttl_decrement: number = 1): Ipv4Packet {
+        return new Ipv4Packet(
+            packet._dscp, packet._ecn, packet._ttl - ttl_decrement, packet._protocol,
+            packet._src, packet._dest, packet._options.toArray(), packet._data
+        );
     }
 }

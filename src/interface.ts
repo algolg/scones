@@ -14,13 +14,29 @@ export class IdentifiedList<T extends IdentifiedItem> extends Array<T> {
 
     /**
      * Pushes an IdentifiedItem and sorts the list
-     * @param item an IdentifiedItem to add
-     * @returns the index of the IdentifiedItem in the sorted list
+     * @param item An IdentifiedItem to add
+     * @returns The index of the IdentifiedItem in the sorted list
      */
     public push(item: T): number {
         super.push(item);
         super.sort((a,b) => a.compare(b))
         return super.indexOf(item);
+    }
+
+    /**
+     * Deletes an IdentifiedItem
+     * @param item The IdentifiedItem to delete
+     * @returns The previous index of the IdentifiedItem which was deleted
+     */
+    public delete(item: T): number {
+        const idx = this.indexOf(item);
+        if (idx != -1) {
+            for (let i = idx; i < this.length - 1; i++) {
+                this[i] = this[i + 1];
+            }
+            this.pop();
+        }
+        return idx;
     }
 
     public indexOf(item: T): number {
@@ -69,8 +85,17 @@ export class IdentifiedList<T extends IdentifiedItem> extends Array<T> {
         return this.indexOfId(id) != -1;
     }
 
+    /**
+     * Returns the item that has a given ID
+     * @param id The ID of the item to look for
+     * @returns The item, if it exists. undefined otherwise.
+     */
     public itemFromId(id: Identifier): T {
-        return this[this.indexOfId(id)];
+        const idx = this.indexOfId(id)
+        if (idx != -1) {
+            return this[idx];
+        }
+        return undefined;
     }
 }
 
@@ -99,6 +124,26 @@ class InterfaceMatrix {
         }
 
         this._matrix = new_matrix;
+
+        this.printMatrix();
+    }
+
+    public delete(inf: Interface) {
+        const idx = this._list.delete(inf);
+        if (idx != -1) {
+            for (let i = idx; i < this._matrix.length - 1; i++) {
+                this._matrix[i] = this._matrix[i + 1];
+            }
+            this._matrix.pop();
+
+            for (let row of this._matrix) {
+                for (let i = idx; i < row.length - 1; i++) {
+                    row[i] = row[i + 1];
+                }
+                row.pop();
+            }
+        }
+        this.printMatrix();
     }
 
     public exists(inf: Interface) {
@@ -260,21 +305,6 @@ class InterfaceMatrix {
 
         const recipient_inf = this.getNeighborInf(egress_mac);
         await recipient_inf.receive(frame, recipient_inf.mac);
-
-        // // if the frame is a broadcast frame, it doesn't matter what the neighboring interface is
-        // if (frame.dest_mac.isBroadcast()) {
-        //     const recipient_inf = this.getNeighborInf(frame.src_mac);
-        //     await recipient_inf.receive(frame, recipient_inf.mac);
-        // }
-        // else {
-        //     const recipient_inf = this._list.itemFromId(frame.dest_mac);
-        //     if (recipient_inf === undefined) {
-        //         throw Error(`recipient MAC ${frame.dest_mac} does not belong to an interface`)
-        //     }
-        //     if (this.areConnected(sender_inf.mac, recipient_inf.mac)) {
-        //         await recipient_inf.receive(frame, recipient_inf.mac);
-        //     }
-        // }
     }
 
     private printMatrix() {
@@ -340,11 +370,15 @@ class Interface implements IdentifiedItem {
     }
 
     public isUp(): boolean {
+        return this._status == InfStatus.UP;
+    }
+
+    public isActive(): boolean {
         return this._status == InfStatus.UP && InfMatrix.isConnected(this._mac);
     }
     
     /**
-     * Sends a frame
+     * Sends a frame out of this interface
      * @param frame the frame to send
      */
     public async send(frame: Frame): Promise<void> {
@@ -353,7 +387,7 @@ class Interface implements IdentifiedItem {
     }
 
     /**
-     * Receives a frame
+     * Receives a frame from this interface
      * @param frame the frame that is being received
      */
     public async receive(frame: Frame, ingress_mac: MacAddress): Promise<void> {
@@ -425,7 +459,7 @@ export class L3Interface extends Interface {
         const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
         setTimeout(() => {
             this.send(frame);
-        }, 0)
+        }, 10)
         return true;
     }
 }
