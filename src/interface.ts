@@ -124,8 +124,6 @@ class InterfaceMatrix {
         }
 
         this._matrix = new_matrix;
-
-        this.printMatrix();
     }
 
     public delete(inf: Interface) {
@@ -143,7 +141,6 @@ class InterfaceMatrix {
                 row.pop();
             }
         }
-        this.printMatrix();
     }
 
     public exists(inf: Interface) {
@@ -323,7 +320,7 @@ class InterfaceMatrix {
 
 export const InfMatrix = new InterfaceMatrix(); 
 
-class Interface implements IdentifiedItem {
+abstract class Interface implements IdentifiedItem {
     protected readonly _mac: MacAddress;
     protected _status: InfStatus = InfStatus.UP;
     protected _vlan: number = null;
@@ -373,6 +370,14 @@ class Interface implements IdentifiedItem {
         return this._status == InfStatus.UP;
     }
 
+    public isL2(): boolean {
+        return this._layer == InfLayer.L2;
+    }
+
+    public isL3(): boolean {
+        return this._layer == InfLayer.L3;
+    }
+
     public isActive(): boolean {
         return this._status == InfStatus.UP && InfMatrix.isConnected(this._mac);
     }
@@ -419,8 +424,8 @@ export class L3Interface extends Interface {
         this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);
     }
 
-    public set ipv4(ipv4: Ipv4Address) {
-        this._ipv4 = ipv4
+    public set ipv4(ipv4: [number, number, number, number]) {
+        this._ipv4.value = ipv4;
     }
 
     public get ipv4(): Ipv4Address {
@@ -443,16 +448,6 @@ export class L3Interface extends Interface {
      * Sends an ARP broadcast to find the MAC Address associated with a neighbor's IPv4 address
      * @param ethertype the EtherType of the connection (is this needed?)
      * @param ip the neighbor's IPv4 address
-     */
-    // Note: should this function return anything? or should it just send the ARP request?
-    /**
-     * I'm leaning towards not returning any valid (or at least, not returning the received packet),
-     * since I'd like for the frame sending/receiving mechanisms to be totally stateless (or as
-     * stateless as possible, anyway).
-     * The return value for the sending function should therefore be irrelevant to the frame sent.
-     */
-    /**
-     * Also consider whether this function should be async. If it should, remove the setTimeout()
      */
     public find(ip: Ipv4Address): boolean {
         const arppacket = new ArpPacket(OP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);

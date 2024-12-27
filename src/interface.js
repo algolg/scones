@@ -118,7 +118,6 @@ class InterfaceMatrix {
             new_matrix[i + 1] = [...this._matrix[i].slice(0, idx), 0, ...this._matrix[i].slice(idx)];
         }
         this._matrix = new_matrix;
-        this.printMatrix();
     }
     delete(inf) {
         const idx = this._list.delete(inf);
@@ -134,7 +133,6 @@ class InterfaceMatrix {
                 row.pop();
             }
         }
-        this.printMatrix();
     }
     exists(inf) {
         return this._list.exists(inf);
@@ -331,6 +329,12 @@ class Interface {
     isUp() {
         return this._status == InfStatus.UP;
     }
+    isL2() {
+        return this._layer == InfLayer.L2;
+    }
+    isL3() {
+        return this._layer == InfLayer.L3;
+    }
     isActive() {
         return this._status == InfStatus.UP && exports.InfMatrix.isConnected(this._mac);
     }
@@ -369,7 +373,7 @@ class L3Interface extends Interface {
         this._ipv4_prefix = new addressing_1.Ipv4Prefix(ipv4_prefix);
     }
     set ipv4(ipv4) {
-        this._ipv4 = ipv4;
+        this._ipv4.value = ipv4;
     }
     get ipv4() {
         return this._ipv4;
@@ -387,16 +391,6 @@ class L3Interface extends Interface {
      * Sends an ARP broadcast to find the MAC Address associated with a neighbor's IPv4 address
      * @param ethertype the EtherType of the connection (is this needed?)
      * @param ip the neighbor's IPv4 address
-     */
-    // Note: should this function return anything? or should it just send the ARP request?
-    /**
-     * I'm leaning towards not returning any valid (or at least, not returning the received packet),
-     * since I'd like for the frame sending/receiving mechanisms to be totally stateless (or as
-     * stateless as possible, anyway).
-     * The return value for the sending function should therefore be irrelevant to the frame sent.
-     */
-    /**
-     * Also consider whether this function should be async. If it should, remove the setTimeout()
      */
     find(ip) {
         const arppacket = new arp_1.ArpPacket(arp_1.OP.REQUEST, this._mac, this._ipv4, addressing_1.MacAddress.broadcast, ip);

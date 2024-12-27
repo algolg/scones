@@ -42,6 +42,11 @@ function concat(...uint8arrays) {
     return result;
 }
 exports.concat = concat;
+/**
+ * Spreads numbers across a certain number of bits, merges them together, and splits them into an array of bytes
+ * @param pairs Any number of [number to spread, number of bits to spread across] tuples
+ * @returns The spread-out array of bytes
+ */
 function spread(...pairs) {
     const values = pairs.map(x => x[0]);
     const bits = pairs.map(x => x[1]);
@@ -80,6 +85,12 @@ function spread(...pairs) {
     return output;
 }
 exports.spread = spread;
+/**
+ * Redraws the boundaries in an array of bytes
+ * @param arr The array of bytes to divide
+ * @param divisions A number array containing the lengths in bits of each division
+ * @returns The divided array
+ */
 function divide(arr, divisions) {
     let num = arr.toBigInt();
     let bits_remaining = arr.length * 8;
@@ -102,12 +113,25 @@ function divide(arr, divisions) {
     return output;
 }
 exports.divide = divide;
+/**
+ * Limits the value of a number to a certain number of bits, taking from the least-significant side
+ * @param num The number to limit
+ * @param bits The number of bits to limit to
+ * @returns The limited number
+ */
 function limit(num, bits) {
     return num & (2 ** bits - 1);
 }
 exports.limit = limit;
-function padTo32BitWords(arr) {
-    return Array(Math.ceil(arr.length / 4) * 4 - arr.length).fill(0).concat(arr).slice(0, 40);
+/**
+ * Pads an array of bytes on the left to ensure that its length is a multiple of 4 bytes
+ * @param arr The number array to pad
+ * @param min_bytes The minimum number of bytes in the output (Default: 0)
+ * @param max_bytes The maximum number of bytes in the output (Default: 40)
+ * @returns Array of bytes with the left side padded
+ */
+function padTo32BitWords(arr, min_bytes = 0, max_bytes = 40) {
+    return Array(Math.max(Math.ceil(arr.length / 4) * 4, min_bytes) - arr.length).fill(0).concat(arr).slice(0, max_bytes);
 }
 exports.padTo32BitWords = padTo32BitWords;
 class DeviceID {
@@ -153,16 +177,19 @@ class MacAddress {
     static get broadcast() {
         return new MacAddress([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
     }
+    static get loopback() {
+        return new MacAddress([0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    }
     static rand() {
         let valid = false;
         let macArr;
         while (!valid) {
             macArr = [
-                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256),
-                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256),
-                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)
+                Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256),
+                Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256),
+                Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256)
             ];
-            if (!macArr.every((x) => x == 0xFF)) {
+            if (!macArr.every((x) => x == 0xFF || x == 0x00)) {
                 valid = true;
             }
         }
@@ -202,7 +229,7 @@ class Ipv4Address {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
     }
     get value() {
-        return new Uint8Array(this._value);
+        return this._value;
     }
     get ethertype() {
         return frame_1.EtherType.IPv4;
@@ -221,7 +248,7 @@ class Ipv4Address {
         return Array.from(this._value).map((x) => (x).toString()).join(".");
     }
     and(prefix) {
-        const anded = this._value.map((x, idx) => x & prefix.mask[idx]);
+        const anded = this._value.map((x, idx) => x & prefix.mask._value[idx]);
         return new Ipv4Address([anded[0], anded[1], anded[2], anded[3]]);
     }
     compare(other) {

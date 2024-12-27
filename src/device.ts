@@ -1,28 +1,33 @@
-import { Ipv4Address, Identifier, DeviceID, MacAddress } from "./addressing.js";
+import { Ipv4Address, Identifier, DeviceID, MacAddress, Ipv4Prefix } from "./addressing.js";
 import { ArpPacket, ArpTable, OP } from "./arp.js";
 import { ForwardingInformationBase } from "./forwarding.js";
 import { EtherType, Frame } from "./frame.js";
+import { IcmpControlMessage, IcmpDatagram } from "./icmp.js";
 import { IdentifiedList, InfMatrix, L2Interface, L3Interface } from "./interface.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 import { RoutingTable } from "./routing.js";
+import { Socket, SocketTable } from "./socket.js";
 
 export interface IdentifiedItem {
     getId(): Identifier;
     compare(other: this): number;
 }
 
-export class Device implements IdentifiedItem {
+enum IpResponse { SENT, TIME_EXCEEDED, HOST_UNREACHABLE, NET_UNREACHABLE }
+
+export abstract class Device implements IdentifiedItem {
     private readonly _id: DeviceID;
     private _forwarding_table: ForwardingInformationBase = new ForwardingInformationBase();
-    public _arp_table: ArpTable = new ArpTable(); /* don't keep this public */
-    private _routing_table: RoutingTable = new RoutingTable();
+    protected _arp_table: ArpTable = new ArpTable(); /* don't keep this public */
+    protected _routing_table: RoutingTable = new RoutingTable();
     protected _network_controller: NetworkController = new NetworkController(this);
+    protected _env: Map<string, string> = new Map();
+    protected _sockets: SocketTable = new SocketTable();
     protected readonly _l3infs: L3Interface[] = [];
     protected readonly _l2infs: L2Interface[] = [];
     private static DeviceList = new IdentifiedList<Device>();
 
     public constructor() {
-        console.error("Note: Device ArpTable is currently public");
         let assigned = false;
         while (!assigned) {
             const devid = DeviceID.rand();
@@ -92,24 +97,36 @@ export class Device implements IdentifiedItem {
      * @param packet The packet to encapsulate as a frame and send
      * @returns boolean indicating whether the device was able to send the packet
      */
-    private tryEncapsulateAndSend(packet: Ipv4Packet): boolean {
+    private tryEncapsulateAndSend(packet: Ipv4Packet): IpResponse {
+        // time exceeded
+        if (packet.ttl <= 0) {
+            return IpResponse.TIME_EXCEEDED;
+        }
         const ipv4_dest = packet.dest;
         for (let l3inf of this._l3infs) {
+            // check if this device is the destination
+            if (l3inf.ipv4.compare(ipv4_dest) == 0) {
+                // packets a device sends to itself would really be sent/received by the loopback interface
+                // (could be implemented later on)
+                l3inf.receive(new Frame(l3inf.mac, l3inf.mac, EtherType.IPv4, packet.packet), l3inf.mac);
+                return IpResponse.SENT;
+            }
             // if the subnet of the packet matches the subnet of one of this device's infs,
             // then send a local packet
-            if (l3inf.ipv4.and(l3inf.ipv4_prefix).compare(ipv4_dest.and(l3inf.ipv4_prefix)) == 0) {
+            else if (l3inf.ipv4.and(l3inf.ipv4_prefix).compare(ipv4_dest.and(l3inf.ipv4_prefix)) == 0) {
                 // use the ARP table to try to get the MAC address of the destination
                 const try_mac = this._arp_table.get(ipv4_dest);
                 if (try_mac !== undefined) {
                     setTimeout(() => {
                         l3inf.send(new Frame(try_mac[0], l3inf.mac, EtherType.IPv4, packet.packet));
                     }, 10);
-                    return true;
+                    return IpResponse.SENT;
                 }
                 // if the destination MAC address is unknown, send an ARP request instead of the packet
+                // destination host unreachable
                 else {
                     l3inf.find(ipv4_dest);
-                    return false;
+                    return IpResponse.HOST_UNREACHABLE;
                 }
             }
         }
@@ -127,17 +144,23 @@ export class Device implements IdentifiedItem {
                     setTimeout(() => {
                         inf.send(new Frame(try_mac[0], inf.mac, EtherType.IPv4, packet.packet));
                     }, 10);
-                    return true;
+                    return IpResponse.SENT;
                 }
                 // if the MAC address is unknown, send an ARP request instead of the packet
+                // destination network unreachable
                 else {
-                    inf.find(ipv4_dest);
-                    return false;
+                    inf.find(next_hop);
+                    return IpResponse.NET_UNREACHABLE;
                 }
 
             }
         }
-        return false;
+        // destination network unreachable
+        return IpResponse.NET_UNREACHABLE;
+    }
+
+    private hasL2Infs(): boolean {
+        return this._l2infs.length > 0;
     }
 
     private hasL3Infs(): boolean {
@@ -185,14 +208,15 @@ export class Device implements IdentifiedItem {
         return this._l3infs.find((x) => x.ipv4.compare(ipv4) == 0);
     }
 
-    // Note: what type should the packet sending/receiving functions return? bool, void, etc.?
     public async processFrame(frame: Frame, ingress_mac: MacAddress): Promise<boolean> {
         const ethertype = frame.ethertype;
         const [should_process, should_forward] = this.analyze(frame);
 
         setTimeout(() => {
             // add the frame source to the FIB as long as it isn't from the same device, or from an invalid MAC (broadcast)
-            if (!this.hasInfWithMac(frame.src_mac)  && !frame.src_mac.isBroadcast()) {
+            // this should only apply to L2 infs, since L3 infs will use their ARP table instead
+            // although definitely verify that this doesn't cause issues
+            if (this.getInfFromMac(ingress_mac).isL2() && !this.hasInfWithMac(frame.src_mac)  && !frame.src_mac.isBroadcast()) {
                 this._forwarding_table.set(frame.src_mac, ingress_mac);
             }
             /**
@@ -202,12 +226,12 @@ export class Device implements IdentifiedItem {
             // many protocols only apply to L3 devices (generalize to devices with L3 ports)
             if (should_process.value) {
                 switch (ethertype) {
-                    case EtherType.ARP: if (this.hasL3Infs) {
+                    case EtherType.ARP: if (this.hasL3Infs()) {
                         const packet = ArpPacket.parsePacket(frame.packet);
                         this.processARP(packet, ingress_mac, should_forward);
                         break;
                     }
-                    case EtherType.IPv4: if (this.hasL3Infs)  {
+                    case EtherType.IPv4: if (this.hasL3Infs())  {
                         const packet = Ipv4Packet.parsePacket(frame.packet);
                         if (Ipv4Packet.verifyChecksum(packet)) {
                             console.log("IPv4 checksum verification succeeded!")
@@ -241,7 +265,6 @@ export class Device implements IdentifiedItem {
         // valid interfaces are up (on and connected to), not the same as the ingress, and have the same VLAN as the ingress
         const broadcast_domain = this._l2infs.filter((x) => x.isActive() && x.mac.compare(ingress_inf.mac) != 0 && x.vlan == ingress_inf.vlan);
         for (let inf of broadcast_domain) {
-            console.log(`broadcast - forwarding from ${inf.mac}`);
             await inf.send(frame);
         }
     }
@@ -296,34 +319,160 @@ export class Device implements IdentifiedItem {
         }
     }
 
-    private async processIpv4(ipv4_packet: Ipv4Packet, ingress_mac) {
-        // if this device is the destination, process the packet within
-        if (this.hasInfWithIpv4(ipv4_packet.dest)) {
-            switch (ipv4_packet.protocol) {
-                case InternetProtocolNumbers.ICMP:
-                    console.log("I've received an ICMP packet!");
-                    break;
-                case InternetProtocolNumbers.TCP:
-                    break;
-                case InternetProtocolNumbers.UDP:
-                    break;
+    private async processIpv4(ipv4_packet: Ipv4Packet, ingress_mac): Promise<boolean> {
+        // RFC 1812 5.2.1 may be used as a guide
+        switch (ipv4_packet.protocol) {
+            case InternetProtocolNumbers.ICMP:
+                const icmp_datagram = IcmpDatagram.parse(ipv4_packet.data);
+                if (IcmpDatagram.verifyChecksum(icmp_datagram)) {
+                    console.log("ICMP checksum verification succeeded!")
+                    this.processICMP(icmp_datagram, ipv4_packet);
+                    return true;
+                }
+                else {
+                    console.log("ICMP checksum verification failed!");
+                }
+                break;
+            case InternetProtocolNumbers.TCP:
+                break;
+            case InternetProtocolNumbers.UDP:
+                break;
+        }
+        if (!this.hasInfWithIpv4(ipv4_packet.dest)) {
+            if (this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(ipv4_packet)) == IpResponse.SENT) {
+                return true;
             }
         }
-        // otherwise, forward the packet to its destination
-        else {
-            this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(ipv4_packet));
+        return false;
+    }
+
+    private async processICMP(icmp_datagram: IcmpDatagram, ipv4_packet: Ipv4Packet): Promise<boolean> {
+        // check for any sockets
+        for (let icmp_socket of this._sockets.getIcmpSockets()) {
+            const matched = icmp_socket.check(icmp_datagram, ipv4_packet);
+            console.log(`---------- checking socket: ${matched} ----------`);
+            // one packet can only match one socket
+            if (matched) {
+                break;
+            }
         }
+        // if this device is not the destination, try to forward the request
+        // return ICMP errors if any arise
+        if (!this.hasInfWithIpv4(ipv4_packet.dest)) {
+            const sent = this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(ipv4_packet));
+            switch (sent) {
+                case IpResponse.SENT:
+                    return true;
+                case IpResponse.HOST_UNREACHABLE:
+                    return this.tryEncapsulateAndSend(new Ipv4Packet(
+                        0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [],
+                        IcmpDatagram.hostUnreachable(icmp_datagram, ipv4_packet).datagram
+                    )) == IpResponse.SENT;
+                case IpResponse.NET_UNREACHABLE:
+                    return this.tryEncapsulateAndSend(new Ipv4Packet(
+                        0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [],
+                        IcmpDatagram.netUnreachable(icmp_datagram, ipv4_packet).datagram
+                    )) == IpResponse.SENT;
+                case IpResponse.TIME_EXCEEDED:
+                    return this.tryEncapsulateAndSend(new Ipv4Packet(
+                        0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [],
+                        IcmpDatagram.timeExceeded(icmp_datagram, ipv4_packet).datagram
+                    )) == IpResponse.SENT;
+            }
+        }
+        // otherwise, process the packet thoroughly
+        switch (icmp_datagram.type) {
+            // if the datagram is an Echo Request, send a reply
+            case IcmpControlMessage.ECHO_REQUEST:
+                console.log(`!! ICMP Request Received!`);
+                const sent = this.tryEncapsulateAndSend(new Ipv4Packet(
+                    0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [],
+                    IcmpDatagram.echoReply(icmp_datagram).datagram
+                ));
+                return sent == IpResponse.SENT;
+            // Note: no packet will be forwarded if it's an Echo Reply
+            // (so this block can be deleted later)
+            case IcmpControlMessage.ECHO_REPLY:
+                // check for an ICMP socket, see if this datagram matches its check function
+                console.log(`!! ICMP Reply Received! (there are ${this._sockets.getIcmpSockets().size} sockets)`)
+                return false;
+        }
+        return false;
     }
 
-    private async processICMP() {
-
+    public async ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255) {
+        const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
+        this._env.set('PING_SEQ', id.toString());
+        
+        let hits = 0;
+        let echo_num = 1;
+        if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {hits++}
+        echo_num++;
+        const interval = setInterval(async () => {
+            if (echo_num <= count) {
+                if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {hits++}
+                echo_num++;
+            }
+            else {
+                console.log(`${hits}/${count}`)
+                clearInterval(interval);
+            }
+        }, 1000);
     }
 
-    public sendICMPEcho(dest_ipv4: Ipv4Address) {
-        const packet = new Ipv4Packet(
-            0, 0, 255, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], new Uint8Array()
-        )
-        this.tryEncapsulateAndSend(packet);
+    /**
+     * Sends an ICMP Echo and looks for a response
+     * @param dest_ipv4 IPv4 address of the device to send the ICMP Echo to
+     * @param id Identifier of the ICMP Echo
+     * @param seq_num Sequence number of the ICMP Echo
+     * @param ttl Initial time to live of the ICMP Echo
+     * @returns If a response was given, the control message of the response. Otherwise, undefined.
+     */
+    public async icmpEcho(dest_ipv4: Ipv4Address, id: number = 1, seq_num: number = 1, ttl: number = 255): Promise<IcmpControlMessage> {
+        return new Promise((resolve) => {
+            if (this.hasL3Infs()) {
+                const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
+                const packet = new Ipv4Packet(
+                    0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram
+                )
+                if (this.tryEncapsulateAndSend(packet) == IpResponse.SENT) {
+                    let start = performance.now();
+                    const ping_socket = Socket.icmpSocketFrom(icmp_request, packet);
+                    this._sockets.addIcmpSocket(ping_socket);
+                    console.log("----------- socket added ----------")
+                    let i = 0;
+                    const interval_length = 100;
+
+                    const interval = setInterval(() => {
+                        const datagram_received = ping_socket.hits > 0;
+                        const timed_out = i >= 1000/interval_length - 1;
+                        if (datagram_received || timed_out) {
+                            this._sockets.deleteIcmpSocket(ping_socket);
+                            clearInterval(interval);
+                            console.log("---------- socket deleted ---------")
+                        }
+                        if (datagram_received) {
+                            let end = performance.now();
+                            const datagram = ping_socket.matched_top;
+                            console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
+                            resolve(datagram.type);
+                            return;
+                        }
+                        else if (timed_out) {
+                            resolve(undefined);
+                            return;
+                        }
+                        i++;
+                    }, interval_length);
+                }
+                else {
+                    resolve(IcmpControlMessage.UNREACHABLE);
+                }
+            }
+            else {
+                resolve(undefined);
+            }
+        })
     }
 
 }
@@ -371,14 +520,24 @@ class PersonalComputer extends Device {
     }
 
     public get inf(): L3Interface {
-        return this._l3infs[0];;
+        return this._l3infs[0];
+    }
+
+    public set default_gateway(gateway: [number, number, number, number]) {
+        this._routing_table.set(
+            new Ipv4Address([0,0,0,0]),
+            new Ipv4Prefix(0),
+            new Ipv4Address(gateway),
+            this._l3infs[0].ipv4,
+            1
+        )
     }
 }
 
 class Switch extends Device {
     public constructor(num_inf: number) {
         super();
-        for (let i=0; i < num_inf; i++) {
+        for (let i = 0; i < num_inf; i++) {
             this._l2infs.push(new L2Interface(this._network_controller));
         }
         InfMatrix.link(...this._l2infs.map((x) => x.mac));
@@ -389,49 +548,54 @@ class Switch extends Device {
     }
 }
 
+class Router extends Device {
+    public constructor(num_inf: number) {
+        super();
+        for (let i = 0; i < num_inf; i++) {
+            this._l3infs.push(new L3Interface(this._network_controller));
+        }
+        InfMatrix.link(...this._l3infs.map((x) => x.mac));
+    }
+
+    public get l3infs(): L3Interface[] {
+        return this._l3infs;
+    }
+}
+
 async function test_icmp() {
     const pc1 = new PersonalComputer();
     const pc2 = new PersonalComputer();
-    const pc3 = new PersonalComputer();
-    const sw1 = new Switch(5);
-    const sw2 = new Switch(5);
-    const sw3 = new Switch(5);
+    const sw1 = new Switch(2);
+    const sw2 = new Switch(2);
+    const ro1 = new Router(2);
+
     pc1.ipv4 = [192,168,0,10];
-    pc2.ipv4 = [192,168,0,20];
+    pc1.ipv4_prefix = 24;
+    pc1.default_gateway = [192,168,0,1]
+
+    pc2.ipv4 = [192,168,1,10];
+    pc2.ipv4_prefix = 24;
+    pc2.default_gateway = [192,168,1,1]
+
+    ro1.l3infs[0].ipv4 = [192,168,0,1];
+    ro1.l3infs[0].ipv4_prefix = 24;
+    ro1.l3infs[1].ipv4 = [192,168,1,1];
+    ro1.l3infs[1].ipv4_prefix = 24;
+
     console.log(`pc1:\t${pc1.inf.mac}`);
+    console.log(`pc2:\t${pc2.inf.mac}`);
     console.log(`sw1[0]:\t${sw1.l2infs[0].mac}`);
     console.log(`sw1[1]:\t${sw1.l2infs[1].mac}`);
-    console.log(`sw1[2]:\t${sw1.l2infs[2].mac}`);
     console.log(`sw2[0]:\t${sw2.l2infs[0].mac}`);
     console.log(`sw2[1]:\t${sw2.l2infs[1].mac}`);
-    console.log(`sw3[0]:\t${sw3.l2infs[0].mac}`);
-    console.log(`sw3[1]:\t${sw3.l2infs[1].mac}`);
-    console.log(`pc2:\t${pc2.inf.mac}`);
-    console.log(`pc3:\t${pc3.inf.mac}`);
+    console.log(`ro1[0]:\t${ro1.l3infs[0].mac}`);
+    console.log(`ro1[1]:\t${ro1.l3infs[1].mac}`);
+
     InfMatrix.connect(pc1.inf.mac, sw1.l2infs[0].mac);
-    InfMatrix.connect(sw1.l2infs[1].mac, sw2.l2infs[0].mac);
-    InfMatrix.connect(sw3.l2infs[0].mac, sw1.l2infs[2].mac);
-    InfMatrix.connect(pc3.inf.mac, sw3.l2infs[1].mac);
-    InfMatrix.connect(sw2.l2infs[1].mac, pc2.inf.mac);
+    InfMatrix.connect(sw1.l2infs[1].mac, ro1.l3infs[0].mac);
+    InfMatrix.connect(ro1.l3infs[1].mac, sw2.l2infs[1].mac);
+    InfMatrix.connect(sw2.l2infs[0].mac, pc2.inf.mac);
 
-    let i = 0;
-    let check;
-
-    check = pc1._arp_table.has(pc2.ipv4);
-    console.log(`--> !!!!! ${check}`);
-    pc1.sendICMPEcho(pc2.ipv4);
-    i++;
-
-    const waiting = setInterval(() => {
-        if (check || i >= 5) {
-            clearInterval(waiting);
-        }
-        else {
-            check = pc1._arp_table.has(pc2.ipv4);
-            console.log(`--> !!!!! ${check}`);
-            pc1.sendICMPEcho(pc2.ipv4);
-            i++;
-        }
-    }, 1000)
+    pc1.ping(pc2.ipv4, 4);
 }
 test_icmp();

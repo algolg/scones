@@ -13,55 +13,33 @@ var InternetProtocolNumbers;
 class Ipv4Packet {
     // RFC 791, 2474
     constructor(dscp, ecn, ttl, protocol, src, dest, options, data) {
-        this._version = 4; // 0
-        this._identification = 0; // 5
-        this._flags = 0; // 6
-        this._fragment_offset = 0; // 7
-        this._header_checksum = new Uint8Array([0, 0]);
-        this._dscp = (0, addressing_1.limit)(dscp, Ipv4Packet._lengths[2]);
-        this._ecn = (0, addressing_1.limit)(ecn, Ipv4Packet._lengths[3]);
-        this._ttl = (0, addressing_1.limit)(ttl, Ipv4Packet._lengths[8]);
-        this._protocol = (0, addressing_1.limit)(protocol, Ipv4Packet._lengths[9]);
-        this._src = src;
-        this._dest = dest;
-        this._options = new Uint8Array((0, addressing_1.padTo32BitWords)(options));
-        this._data = data;
-        this._ihl = 5 + Math.trunc(this._options.length / 4);
-        this._total_length = (this._ihl * 8) + this._data.length;
+        this.version = 4; // 0
+        this.identification = 0; // 5
+        this.flags = 0; // 6
+        this.fragment_offset = 0; // 7
+        this._header_checksum = new Uint8Array(2);
+        this.dscp = (0, addressing_1.limit)(dscp, Ipv4Packet._lengths[2]);
+        this.ecn = (0, addressing_1.limit)(ecn, Ipv4Packet._lengths[3]);
+        this.ttl = (0, addressing_1.limit)(ttl, Ipv4Packet._lengths[8]);
+        this.protocol = (0, addressing_1.limit)(protocol, Ipv4Packet._lengths[9]);
+        this.src = src;
+        this.dest = dest;
+        this.options = new Uint8Array((0, addressing_1.padTo32BitWords)(options, 0, 40));
+        this.data = data;
+        this.ihl = 5 + Math.trunc(this.options.length / 4);
+        this.total_length = (this.ihl * 8) + this.data.length;
         let header = this.header;
         this._header_checksum = new Uint8Array((0, addressing_1.spread)([Ipv4Packet.calculateChecksum(header), 16]));
         for (let i = 0; i < 2; i++) {
             header[i + Ipv4Packet._bytes_before_checksum] = this._header_checksum[i];
         }
-        this._packet = (0, addressing_1.concat)(header, this._data);
-    }
-    get dscp() {
-        return this._dscp;
-    }
-    get ecn() {
-        return this._ecn;
-    }
-    get protocol() {
-        return this._protocol;
-    }
-    get src() {
-        return this._src;
-    }
-    get dest() {
-        return this._dest;
-    }
-    get packet() {
-        return this._packet;
+        this.packet = (0, addressing_1.concat)(header, this.data);
     }
     get packet_length() {
-        return this._packet.length;
+        return this.packet.length;
     }
     get header() {
-        return new Uint8Array([
-            ...(0, addressing_1.spread)([this._version, Ipv4Packet._lengths[0]], [this._ihl, Ipv4Packet._lengths[1]], [this._dscp, Ipv4Packet._lengths[2]], [this._ecn, Ipv4Packet._lengths[3]], [this._total_length, Ipv4Packet._lengths[4]], [this._identification, Ipv4Packet._lengths[5]], [this._flags, Ipv4Packet._lengths[6]], [this._fragment_offset, Ipv4Packet._lengths[7]], [this._ttl, Ipv4Packet._lengths[8]], [this._protocol, Ipv4Packet._lengths[9]]),
-            ...this._header_checksum,
-            ...this._src.toArray(), ...this._dest.toArray()
-        ]);
+        return (0, addressing_1.concat)(new Uint8Array((0, addressing_1.spread)([this.version, Ipv4Packet._lengths[0]], [this.ihl, Ipv4Packet._lengths[1]], [this.dscp, Ipv4Packet._lengths[2]], [this.ecn, Ipv4Packet._lengths[3]], [this.total_length, Ipv4Packet._lengths[4]], [this.identification, Ipv4Packet._lengths[5]], [this.flags, Ipv4Packet._lengths[6]], [this.fragment_offset, Ipv4Packet._lengths[7]], [this.ttl, Ipv4Packet._lengths[8]], [this.protocol, Ipv4Packet._lengths[9]])), this._header_checksum, this.src.value, this.dest.value);
     }
     static onesComplement16Bits(num) {
         return (~num >>> 0) & 0xFFFF;
@@ -90,11 +68,11 @@ class Ipv4Packet {
         const src = new addressing_1.Ipv4Address([divided[11], divided[12], divided[13], divided[14]]);
         const dest = new addressing_1.Ipv4Address([divided[15], divided[16], divided[17], divided[18]]);
         const options = divided.slice(Ipv4Packet._bytes_before_options, ihl * 4);
-        const data = new Uint8Array(divided.slice(ihl * 4));
+        const data = new Uint8Array(divided.slice(ihl * 4 - 1));
         return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data);
     }
     static copyAndDecrement(packet, ttl_decrement = 1) {
-        return new Ipv4Packet(packet._dscp, packet._ecn, packet._ttl - ttl_decrement, packet._protocol, packet._src, packet._dest, packet._options.toArray(), packet._data);
+        return new Ipv4Packet(packet.dscp, packet.ecn, packet.ttl - ttl_decrement, packet.protocol, packet.src, packet.dest, packet.options.toArray(), packet.data);
     }
 }
 exports.Ipv4Packet = Ipv4Packet;

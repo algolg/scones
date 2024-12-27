@@ -1,4 +1,4 @@
-import { GeneralIpAddress, Ipv4Address, MacAddress, divide, spread } from "./addressing";
+import { GeneralIpAddress, Ipv4Address, MacAddress, concat, divide, spread } from "./addressing";
 import { EtherType } from "./frame";
 import { Packet } from "./packet";
 
@@ -27,14 +27,14 @@ export class ArpPacket implements Packet {
         this._src_pa = src_pa;
         this._dest_ha = dest_ha;
         this._dest_pa = dest_pa;
-        this._packet = new Uint8Array([
-            ...spread(
+        this._packet = concat(
+            new Uint8Array(spread(
                 [this._htype, ArpPacket._lengths[0]], [this._ptype, ArpPacket._lengths[1]],
                 [this._hlen, ArpPacket._lengths[2]], [this._plen, ArpPacket._lengths[3]], [this._op, ArpPacket._lengths[4]]
-            ),
-            ...this._src_ha.toArray(), ...this._src_pa.toArray(),
-            ...this._dest_ha.toArray(), ...this._dest_pa.toArray()
-        ])
+            )),
+            this._src_ha.value, this._src_pa.value,
+            this._dest_ha.value, this._dest_pa.value
+        )
     }
 
     public get ptype(): EtherType {

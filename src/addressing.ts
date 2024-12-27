@@ -52,6 +52,11 @@ export function concat(...uint8arrays: Uint8Array[]): Uint8Array {
     return result;
 }
 
+/**
+ * Spreads numbers across a certain number of bits, merges them together, and splits them into an array of bytes
+ * @param pairs Any number of [number to spread, number of bits to spread across] tuples
+ * @returns The spread-out array of bytes
+ */
 export function spread(...pairs: [number, number][]): number[] {
     const values: number[] = pairs.map(x => x[0]);
     const bits: number[] = pairs.map(x => x[1]);
@@ -89,6 +94,13 @@ export function spread(...pairs: [number, number][]): number[] {
     }
     return output;
 }
+
+/**
+ * Redraws the boundaries in an array of bytes
+ * @param arr The array of bytes to divide
+ * @param divisions A number array containing the lengths in bits of each division
+ * @returns The divided array
+ */
 export function divide(arr: Uint8Array, divisions: number[]): number[] {
     let num = arr.toBigInt();
     let bits_remaining = arr.length * 8;
@@ -110,11 +122,24 @@ export function divide(arr: Uint8Array, divisions: number[]): number[] {
     }
     return output;
 }
+/**
+ * Limits the value of a number to a certain number of bits, taking from the least-significant side
+ * @param num The number to limit
+ * @param bits The number of bits to limit to
+ * @returns The limited number
+ */
 export function limit(num: number, bits: number): number {
     return num & (2**bits - 1)
 }
-export function padTo32BitWords(arr: number[]): number[] {
-    return Array<number>(Math.ceil(arr.length / 4) * 4 - arr.length).fill(0).concat(arr).slice(0,40)
+/**
+ * Pads an array of bytes on the left to ensure that its length is a multiple of 4 bytes
+ * @param arr The number array to pad
+ * @param min_bytes The minimum number of bytes in the output (Default: 0)
+ * @param max_bytes The maximum number of bytes in the output (Default: 40)
+ * @returns Array of bytes with the left side padded
+ */
+export function padTo32BitWords(arr: number[], min_bytes: number = 0, max_bytes: number = 40): number[] {
+    return Array<number>(Math.max(Math.ceil(arr.length / 4) * 4, min_bytes) - arr.length).fill(0).concat(arr).slice(0,max_bytes);
 }
 
 export interface Identifier {
@@ -172,12 +197,16 @@ export class MacAddress implements Identifier {
         this.value = this.value.map((ele, idx) => (ele = arr[idx]));
     }
 
-    public static get byteLength() {
+    public static get byteLength(): number {
         return 6;
     }
     
-    public static get broadcast() {
+    public static get broadcast(): MacAddress {
         return new MacAddress([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+    }
+    
+    public static get loopback(): MacAddress {
+        return new MacAddress([0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     }
 
     public static rand(): MacAddress {
@@ -185,11 +214,11 @@ export class MacAddress implements Identifier {
         let macArr: [number, number, number, number, number, number];
         while (!valid) {
             macArr = [
-                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256),
-                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256),
-                Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)
+                Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256),
+                Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256),
+                Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256)
             ];
-            if (!macArr.every((x) => x == 0xFF)) {
+            if (!macArr.every((x) => x == 0xFF || x == 0x00)) {
                 valid = true;
             }
         }
@@ -245,7 +274,7 @@ export class Ipv4Address implements GeneralIpAddress {
     }
 
     public get value(): Uint8Array {
-        return new Uint8Array(this._value);
+        return this._value;
     }
 
     public get ethertype(): EtherType {
@@ -270,7 +299,7 @@ export class Ipv4Address implements GeneralIpAddress {
     }
 
     public and(prefix: Ipv4Prefix): Ipv4Address {
-        const anded = this._value.map((x,idx) => x & prefix.mask[idx]);
+        const anded = this._value.map((x,idx) => x & prefix.mask._value[idx]);
         return new Ipv4Address([anded[0], anded[1], anded[2], anded[3]]);
     }
 

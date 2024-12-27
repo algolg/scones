@@ -4,7 +4,6 @@ export class ForwardingInformationBase {
     private _table: Map<string, MacAddress> = new Map();
     
     public set(destination: MacAddress, egress: MacAddress) {
-        console.log(`** ${egress}: adding ${destination} to my forwarding table`)
         if (egress.compare(destination) != 0) {
             this._table.set(destination.toString(), egress);
         }

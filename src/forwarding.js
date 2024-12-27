@@ -6,7 +6,6 @@ class ForwardingInformationBase {
         this._table = new Map();
     }
     set(destination, egress) {
-        console.log(`** ${egress}: adding ${destination} to my forwarding table`);
         if (egress.compare(destination) != 0) {
             this._table.set(destination.toString(), egress);
         }
