@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ForwardingInformationBase = void 0;
-class ForwardingInformationBase {
+export class ForwardingInformationBase {
     constructor() {
         this._table = new Map();
     }
@@ -42,5 +39,4 @@ class ForwardingInformationBase {
         return toClear.length;
     }
 }
-exports.ForwardingInformationBase = ForwardingInformationBase;
 //# sourceMappingURL=forwarding.js.map

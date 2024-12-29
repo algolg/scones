@@ -1,0 +1,24 @@
+@import url('layout.css');
+
+:root {
+    --border-size: min(2px,0.5vmin);
+    --transition: 0.1s;
+    --bg-light: #d1cdb7;
+    --bg: #afaa91;
+    --borders: #514e46;
+}
+
+html, body {
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg);
+}
+
+button {
+    background-color: var(--bg);
+}
+button:hover {
+    cursor: pointer;
+}

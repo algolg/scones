@@ -1,4 +1,4 @@
-import { EtherType } from "./frame";
+import { EtherType } from "./frame.js";
 
 declare global {
     interface Uint8Array {

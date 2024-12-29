@@ -1,31 +1,28 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ArpTable = exports.ArpPacket = exports.OP = void 0;
-const addressing_1 = require("./addressing");
-const frame_1 = require("./frame");
+import { Ipv4Address, MacAddress, concat, divide, spread } from "./addressing.js";
+import { EtherType } from "./frame.js";
 var HTYPE;
 (function (HTYPE) {
     HTYPE[HTYPE["ETHERNET"] = 1] = "ETHERNET";
 })(HTYPE || (HTYPE = {}));
 // enum PTYPE { IPv4 = 0x0800 }
-var OP;
+export var OP;
 (function (OP) {
     OP[OP["REQUEST"] = 1] = "REQUEST";
     OP[OP["REPLY"] = 2] = "REPLY";
-})(OP || (exports.OP = OP = {}));
+})(OP || (OP = {}));
 ;
-class ArpPacket {
-    constructor(op, src_ha, src_pa, dest_ha = addressing_1.MacAddress.broadcast, dest_pa) {
-        this._hlen = addressing_1.MacAddress.byteLength;
-        this._plen = addressing_1.Ipv4Address.byteLength;
+export class ArpPacket {
+    constructor(op, src_ha, src_pa, dest_ha = MacAddress.broadcast, dest_pa) {
+        this._hlen = MacAddress.byteLength;
+        this._plen = Ipv4Address.byteLength;
         this._htype = HTYPE.ETHERNET;
-        this._ptype = frame_1.EtherType.IPv4;
+        this._ptype = EtherType.IPv4;
         this._op = op;
         this._src_ha = src_ha;
         this._src_pa = src_pa;
         this._dest_ha = dest_ha;
         this._dest_pa = dest_pa;
-        this._packet = (0, addressing_1.concat)(new Uint8Array((0, addressing_1.spread)([this._htype, ArpPacket._lengths[0]], [this._ptype, ArpPacket._lengths[1]], [this._hlen, ArpPacket._lengths[2]], [this._plen, ArpPacket._lengths[3]], [this._op, ArpPacket._lengths[4]])), this._src_ha.value, this._src_pa.value, this._dest_ha.value, this._dest_pa.value);
+        this._packet = concat(new Uint8Array(spread([this._htype, ArpPacket._lengths[0]], [this._ptype, ArpPacket._lengths[1]], [this._hlen, ArpPacket._lengths[2]], [this._plen, ArpPacket._lengths[3]], [this._op, ArpPacket._lengths[4]])), this._src_ha.value, this._src_pa.value, this._dest_ha.value, this._dest_pa.value);
     }
     get ptype() {
         return this.ptype;
@@ -49,16 +46,16 @@ class ArpPacket {
         return this._packet;
     }
     static parsePacket(packet) {
-        const divided = (0, addressing_1.divide)(packet, this._lengths);
+        const divided = divide(packet, this._lengths);
         const op = divided[4];
-        const sh_arr = (0, addressing_1.spread)([divided[5], 48]);
-        const sp_arr = (0, addressing_1.spread)([divided[6], 32]);
-        const dh_arr = (0, addressing_1.spread)([divided[7], 48]);
-        const dp_arr = (0, addressing_1.spread)([divided[8], 32]);
-        const src_ha = new addressing_1.MacAddress([sh_arr[0], sh_arr[1], sh_arr[2], sh_arr[3], sh_arr[4], sh_arr[5]]);
-        const src_pa = new addressing_1.Ipv4Address([sp_arr[0], sp_arr[1], sp_arr[2], sp_arr[3]]);
-        const dest_ha = new addressing_1.MacAddress([dh_arr[0], dh_arr[1], dh_arr[2], dh_arr[3], dh_arr[4], dh_arr[5]]);
-        const dest_pa = new addressing_1.Ipv4Address([dp_arr[0], dp_arr[1], dp_arr[2], dp_arr[3]]);
+        const sh_arr = spread([divided[5], 48]);
+        const sp_arr = spread([divided[6], 32]);
+        const dh_arr = spread([divided[7], 48]);
+        const dp_arr = spread([divided[8], 32]);
+        const src_ha = new MacAddress([sh_arr[0], sh_arr[1], sh_arr[2], sh_arr[3], sh_arr[4], sh_arr[5]]);
+        const src_pa = new Ipv4Address([sp_arr[0], sp_arr[1], sp_arr[2], sp_arr[3]]);
+        const dest_ha = new MacAddress([dh_arr[0], dh_arr[1], dh_arr[2], dh_arr[3], dh_arr[4], dh_arr[5]]);
+        const dest_pa = new Ipv4Address([dp_arr[0], dp_arr[1], dp_arr[2], dp_arr[3]]);
         return new ArpPacket(op, src_ha, src_pa, dest_ha, dest_pa);
     }
     printPacket() {
@@ -73,9 +70,8 @@ class ArpPacket {
         return new ArpPacket(OP.REPLY, new_src_ha, this.dest_pa, this.src_ha, this.src_pa);
     }
 }
-exports.ArpPacket = ArpPacket;
 ArpPacket._lengths = [16, 16, 8, 8, 16, 48, 32, 48, 32];
-class ArpTable {
+export class ArpTable {
     constructor() {
         this._table = new Map();
     }
@@ -108,7 +104,6 @@ class ArpTable {
         return toClear.length;
     }
 }
-exports.ArpTable = ArpTable;
 // const arppacket = new ArpPacket(OP.REPLY, MacAddress.rand(), new Ipv4Address([192,168,0,10]), MacAddress.rand(), new Ipv4Address([192,168,0,50]));
 // console.log(arppacket.packet);
 // const arppacket_packet = arppacket.packet;

@@ -1,7 +1,7 @@
-import { Identifier, Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing";
-import { ArpPacket, OP } from "./arp";
-import { IdentifiedItem, NetworkController } from "./device";
-import { EtherType, Frame } from "./frame";
+import { Identifier, Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing.js";
+import { ArpPacket, OP } from "./arp.js";
+import { IdentifiedItem, NetworkController } from "./device.js";
+import { EtherType, Frame } from "./frame.js";
 
 
 enum InfStatus {DOWN = 0, UP = 1}

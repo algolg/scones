@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Ipv4Prefix = exports.Ipv4Address = exports.MacAddress = exports.DeviceID = exports.padTo32BitWords = exports.limit = exports.divide = exports.spread = exports.concat = void 0;
-const frame_1 = require("./frame");
+import { EtherType } from "./frame.js";
 Uint8Array.prototype.toHex = function () {
     return Array.from(this).map((x) => Number(x).toString(16).padStart(2, "0")).join(" ");
 };
@@ -31,7 +28,7 @@ Uint8Array.prototype.toBigInt = function () {
  * @param uint8arrays the arrays to concatenate
  * @returns Concatenated Uint8Array
  */
-function concat(...uint8arrays) {
+export function concat(...uint8arrays) {
     const totalLength = uint8arrays.reduce((total, uint8array) => total + uint8array.byteLength, 0);
     const result = new Uint8Array(totalLength);
     let offset = 0;
@@ -41,13 +38,12 @@ function concat(...uint8arrays) {
     });
     return result;
 }
-exports.concat = concat;
 /**
  * Spreads numbers across a certain number of bits, merges them together, and splits them into an array of bytes
  * @param pairs Any number of [number to spread, number of bits to spread across] tuples
  * @returns The spread-out array of bytes
  */
-function spread(...pairs) {
+export function spread(...pairs) {
     const values = pairs.map(x => x[0]);
     const bits = pairs.map(x => x[1]);
     const bytes = Math.floor(bits.reduce((sum, current) => sum + current, 0) / 8);
@@ -84,14 +80,13 @@ function spread(...pairs) {
     }
     return output;
 }
-exports.spread = spread;
 /**
  * Redraws the boundaries in an array of bytes
  * @param arr The array of bytes to divide
  * @param divisions A number array containing the lengths in bits of each division
  * @returns The divided array
  */
-function divide(arr, divisions) {
+export function divide(arr, divisions) {
     let num = arr.toBigInt();
     let bits_remaining = arr.length * 8;
     let output = [];
@@ -112,17 +107,15 @@ function divide(arr, divisions) {
     }
     return output;
 }
-exports.divide = divide;
 /**
  * Limits the value of a number to a certain number of bits, taking from the least-significant side
  * @param num The number to limit
  * @param bits The number of bits to limit to
  * @returns The limited number
  */
-function limit(num, bits) {
+export function limit(num, bits) {
     return num & (2 ** bits - 1);
 }
-exports.limit = limit;
 /**
  * Pads an array of bytes on the left to ensure that its length is a multiple of 4 bytes
  * @param arr The number array to pad
@@ -130,11 +123,10 @@ exports.limit = limit;
  * @param max_bytes The maximum number of bytes in the output (Default: 40)
  * @returns Array of bytes with the left side padded
  */
-function padTo32BitWords(arr, min_bytes = 0, max_bytes = 40) {
+export function padTo32BitWords(arr, min_bytes = 0, max_bytes = 40) {
     return Array(Math.max(Math.ceil(arr.length / 4) * 4, min_bytes) - arr.length).fill(0).concat(arr).slice(0, max_bytes);
 }
-exports.padTo32BitWords = padTo32BitWords;
-class DeviceID {
+export class DeviceID {
     constructor(value) {
         value = value > DeviceID.max ? DeviceID.max : value < DeviceID.min ? DeviceID.min : Math.trunc(value);
         this.value = value;
@@ -146,7 +138,6 @@ class DeviceID {
         return this.value - other.value;
     }
 }
-exports.DeviceID = DeviceID;
 DeviceID.min = 100000000;
 DeviceID.max = 1000000000;
 class Uint8 {
@@ -166,7 +157,7 @@ class Uint8 {
         return this._value;
     }
 }
-class MacAddress {
+export class MacAddress {
     constructor(arr) {
         this.value = new Uint8Array(6);
         this.value = this.value.map((ele, idx) => (ele = arr[idx]));
@@ -219,8 +210,7 @@ class MacAddress {
         return Array.from(this.value).map((x) => (x).toString(16).padStart(2, "0")).join(":");
     }
 }
-exports.MacAddress = MacAddress;
-class Ipv4Address {
+export class Ipv4Address {
     constructor(arr) {
         this._value = new Uint8Array(4);
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
@@ -232,7 +222,7 @@ class Ipv4Address {
         return this._value;
     }
     get ethertype() {
-        return frame_1.EtherType.IPv4;
+        return EtherType.IPv4;
     }
     static get byteLength() {
         return 4;
@@ -263,8 +253,7 @@ class Ipv4Address {
         return 0;
     }
 }
-exports.Ipv4Address = Ipv4Address;
-class Ipv4Prefix {
+export class Ipv4Prefix {
     constructor(ipv4_prefix) {
         this._ipv4_prefix = ipv4_prefix & 0x3F;
     }
@@ -279,7 +268,6 @@ class Ipv4Prefix {
         return new Ipv4Address([255 - arr[0], 255 - arr[1], 255 - arr[2], 255 - arr[3]]);
     }
 }
-exports.Ipv4Prefix = Ipv4Prefix;
 function main() {
     let test = new Uint8(10);
     console.log(`${test}\t${test.toBinary()}`);

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <title>netsim</title>
+</head>
+<body>
+    <content>
+        <div id="topology">
+            <canvas id="canvas" width="1200px" height="1000px">
+
+            </canvas>
+        </div>
+        <div id="info-panel"></div>
+        <div id="selector-panel">
+            <button onclick="create('PC')" class="selector-option" title="Add a PC">
+                <img src="assets/icons/pc.svg"/>
+            </button>
+            <button onclick="create('SERVER')" class="selector-option" title="Add a Server">
+                <img src="assets/icons/server.svg"/>
+            </button>
+            <button onclick="create('ROUTER')" class="selector-option" title="Add a Router">
+                <img src="assets/icons/router.svg"/>
+            </button>
+            <button onclick="create('SWITCH')" class="selector-option" title="Add a Switch">
+                <img src="assets/icons/switch.svg"/>
+            </button>
+        </div>
+    </content>
+    <script src="src/ui/topology.js" type="module"></script>
+    <script src="src/ui/canvas-init.js" type="module"></script>
+</body>
+</html>

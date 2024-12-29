@@ -1,15 +1,12 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Frame = exports.EtherType = void 0;
-const addressing_1 = require("./addressing");
-var EtherType;
+import { spread } from "./addressing.js";
+export var EtherType;
 (function (EtherType) {
     EtherType[EtherType["IPv4"] = 2048] = "IPv4";
     EtherType[EtherType["ARP"] = 2054] = "ARP";
     EtherType[EtherType["IPv6"] = 34525] = "IPv6";
-})(EtherType || (exports.EtherType = EtherType = {}));
+})(EtherType || (EtherType = {}));
 ;
-class Frame {
+export class Frame {
     constructor(dest_mac, src_mac, ethertype, packet) {
         this._dest_mac = dest_mac;
         this._src_mac = src_mac;
@@ -17,7 +14,7 @@ class Frame {
         this._packet = packet;
         this._frame = new Uint8Array([
             ...this._dest_mac.toArray(), ...this._src_mac.toArray(),
-            ...(0, addressing_1.spread)([this._ethertype, 16]),
+            ...spread([this._ethertype, 16]),
             ...this._packet.toArray(),
             0, 0, 0, 0
         ]);
@@ -48,11 +45,10 @@ class Frame {
             }
         }
         crc ^= 0xFFFFFFFF;
-        return (0, addressing_1.spread)([crc >>> 0, 32]);
+        return spread([crc >>> 0, 32]);
     }
     printFrame() {
         console.log(this._frame.toHex());
     }
 }
-exports.Frame = Frame;
 //# sourceMappingURL=frame.js.map

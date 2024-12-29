@@ -1,21 +1,21 @@
-import { Ipv4Address, concat, divide, limit, padTo32BitWords, spread } from "./addressing";
-import { Packet } from "./packet";
+import { Ipv4Address, concat, divide, limit, padTo32BitWords, spread } from "./addressing.js";
+import { Packet } from "./packet.js";
 
 // RFC 790
 export enum InternetProtocolNumbers { ICMP = 1, TCP = 6, UDP = 17 };
 
 export class Ipv4Packet implements Packet {
-    readonly version: number = 4;                // 0
-    readonly ihl: number;                        // 1
-    readonly dscp: number;                       // 2
-    readonly ecn: number;                        // 3
-    readonly total_length: number;               // 4
-    readonly identification: number = 0;         // 5
-    readonly flags: number = 0;                  // 6
-    readonly fragment_offset: number = 0;        // 7
-    readonly ttl: number;                        // 8
-    readonly protocol: InternetProtocolNumbers;  // 9
-    private readonly _header_checksum = new Uint8Array(2);
+    readonly version: number = 4;                          // 0
+    readonly ihl: number;                                  // 1
+    readonly dscp: number;                                 // 2
+    readonly ecn: number;                                  // 3
+    readonly total_length: number;                         // 4
+    readonly identification: number = 0;                   // 5
+    readonly flags: number = 0;                            // 6
+    readonly fragment_offset: number = 0;                  // 7
+    readonly ttl: number;                                  // 8
+    readonly protocol: InternetProtocolNumbers;            // 9
+    private readonly _header_checksum = new Uint8Array(2); // 10
     readonly src: Ipv4Address;
     readonly dest: Ipv4Address;
     readonly options: Uint8Array;
@@ -26,7 +26,7 @@ export class Ipv4Packet implements Packet {
     private static readonly _bytes_before_options = 20;
 
     // RFC 791, 2474
-    public constructor(dscp: number, ecn: number, ttl: number, protocol: InternetProtocolNumbers, src: Ipv4Address, dest: Ipv4Address, options: number[], data: Uint8Array) {
+    public constructor(dscp: number, ecn: number, ttl: number, protocol: InternetProtocolNumbers, src: Ipv4Address, dest: Ipv4Address, options: number[], data: Uint8Array, checksum?: number) {
         this.dscp = limit(dscp, Ipv4Packet._lengths[2]);
         this.ecn = limit(ecn, Ipv4Packet._lengths[3]);
         this.ttl = limit(ttl, Ipv4Packet._lengths[8]);
@@ -39,7 +39,8 @@ export class Ipv4Packet implements Packet {
         this.total_length = (this.ihl * 8) + this.data.length;
 
         let header = this.header;
-        this._header_checksum = new Uint8Array(spread([Ipv4Packet.calculateChecksum(header), 16]));
+        const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(header)
+        this._header_checksum = new Uint8Array(spread([checksum_num, 16]));
         for (let i = 0; i < 2; i++) {
             header[i + Ipv4Packet._bytes_before_checksum] = this._header_checksum[i];
         }
@@ -92,11 +93,12 @@ export class Ipv4Packet implements Packet {
         const ecn: number = divided[3];
         const ttl: number = divided[8];
         const protocol: InternetProtocolNumbers = divided[9];
+        const header_checksum: number = divided[10];
         const src: Ipv4Address = new Ipv4Address([divided[11], divided[12], divided[13], divided[14]]);
         const dest: Ipv4Address = new Ipv4Address([divided[15], divided[16], divided[17], divided[18]]);
         const options: number[] = divided.slice(Ipv4Packet._bytes_before_options, ihl * 4);
         const data: Uint8Array = new Uint8Array(divided.slice(ihl * 4 - 1));
-        return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data);
+        return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data, header_checksum);
     }
 
     public static copyAndDecrement(packet: Ipv4Packet, ttl_decrement: number = 1): Ipv4Packet {

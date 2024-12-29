@@ -1,4 +1,4 @@
-import { Ipv4Address, Ipv4Prefix } from "./addressing";
+import { Ipv4Address, Ipv4Prefix } from "./addressing.js";
 
 export class RoutingTable {
     /**

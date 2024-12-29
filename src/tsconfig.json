@@ -2,7 +2,7 @@
     "compilerOptions": {
         "target": "ES2021",
         "sourceMap": true,
-        "module": "CommonJS",
+        // "module": "CommonJS",
         "strictFunctionTypes": true,
         "noImplicitReturns": true
     }

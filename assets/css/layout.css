@@ -1,0 +1,69 @@
+content {
+    --padding: 8px;
+    width: calc(100% - var(--padding)*3);
+    height: calc(100% - var(--padding)*3);
+    display: grid;
+    grid-template-columns: max(calc(100% - 500px), 62%) min(500px, 38%);
+    grid-template-rows: max(calc(100% - 100px), 82%) min(100px, 18%);
+    gap: var(--padding);
+    padding: var(--padding);
+}
+
+#topology, #info-panel, #selector-panel {
+    border: min(3px,0.75vmin) solid var(--borders);
+    border-radius: 1px;
+    background-color: var(--bg-light);
+}
+
+#info-panel {
+    grid-column-start: 2;
+    grid-column-end: 3;
+    grid-row-start: 1;
+    grid-row-end: 3;
+}
+
+#selector-panel {
+    grid-column-start: 1;
+    grid-column-end: 2;
+    display: flex;
+}
+.selector-option {
+    transition: background-color var(--transition);
+    position: relative;
+    aspect-ratio: 1;
+    display: block;
+    background-color: var(--bg);
+    border: var(--border-size) solid var(--borders);
+    border-radius: 50%;
+    padding: 2px;
+    margin: min(4px,1vmin) 0 min(4px,1vmin) min(4px,1vmin);
+}
+.selector-option:hover {
+    background-color: var(--borders);
+}
+.selector-option > img {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: auto;
+    max-width: 78%;
+}
+
+#topology {
+    background: repeat url('/assets/images/grid.png');
+    image-rendering: pixelated;
+    overflow: scroll;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+#topology::-webkit-scrollbar {
+  display: none;
+}
+
+#canvas {
+    display: block;
+    object-fit: cover;
+    image-rendering: auto;
+}

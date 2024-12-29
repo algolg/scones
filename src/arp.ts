@@ -1,6 +1,6 @@
-import { GeneralIpAddress, Ipv4Address, MacAddress, concat, divide, spread } from "./addressing";
-import { EtherType } from "./frame";
-import { Packet } from "./packet";
+import { GeneralIpAddress, Ipv4Address, MacAddress, concat, divide, spread } from "./addressing.js";
+import { EtherType } from "./frame.js";
+import { Packet } from "./packet.js";
 
 enum HTYPE { ETHERNET = 1 }
 // enum PTYPE { IPv4 = 0x0800 }

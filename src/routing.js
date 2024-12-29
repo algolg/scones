@@ -1,8 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RoutingTable = void 0;
-const addressing_1 = require("./addressing");
-class RoutingTable {
+import { Ipv4Prefix } from "./addressing.js";
+export class RoutingTable {
     constructor() {
         /**
          * I'd also like to implement load balancing in some way.
@@ -48,7 +45,7 @@ class RoutingTable {
      */
     get(dest_ipv4) {
         for (let i = 32; i >= 0; i++) {
-            const try_search = this._table.get(dest_ipv4.and(new addressing_1.Ipv4Prefix(i)).toString());
+            const try_search = this._table.get(dest_ipv4.and(new Ipv4Prefix(i)).toString());
             if (try_search !== undefined) {
                 const routes = try_search.get(Math.min(...try_search.keys()));
                 // put the top route at the bottom of the array (for load balancing)
@@ -59,5 +56,4 @@ class RoutingTable {
         return undefined;
     }
 }
-exports.RoutingTable = RoutingTable;
 //# sourceMappingURL=routing.js.map

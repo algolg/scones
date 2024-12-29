@@ -7,13 +7,15 @@ import { IdentifiedList, InfMatrix, L2Interface, L3Interface } from "./interface
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 import { RoutingTable } from "./routing.js";
 import { Socket, SocketTable } from "./socket.js";
+import { ICON_SIZE } from "./ui/variables.js";
 
 export interface IdentifiedItem {
     getId(): Identifier;
     compare(other: this): number;
 }
 
-enum IpResponse { SENT, TIME_EXCEEDED, HOST_UNREACHABLE, NET_UNREACHABLE }
+enum IpResponse { SENT, TIME_EXCEEDED, HOST_UNREACHABLE, NET_UNREACHABLE };
+export enum DeviceType { PC, SERVER, ROUTER, SWITCH };
 
 export abstract class Device implements IdentifiedItem {
     private readonly _id: DeviceID;
@@ -25,17 +27,21 @@ export abstract class Device implements IdentifiedItem {
     protected _sockets: SocketTable = new SocketTable();
     protected readonly _l3infs: L3Interface[] = [];
     protected readonly _l2infs: L2Interface[] = [];
+    public readonly device_type: DeviceType;
+    public coords: [number, number];
+
     private static DeviceList = new IdentifiedList<Device>();
 
-    public constructor() {
+    public constructor(device_type: DeviceType) {
+        this.device_type = device_type;
         let assigned = false;
         while (!assigned) {
             const devid = DeviceID.rand();
             const device = new DeviceID(devid)
             if (!Device.DeviceList.existsId(device)) {
+                assigned = true;
                 this._id = device;
                 Device.DeviceList.push(this);
-                assigned = true;
             }
         }
     }
@@ -48,17 +54,35 @@ export abstract class Device implements IdentifiedItem {
      * @param device Device to add
      * @returns Device's ID as a number
      */
-    public static createDevice(device: Device): number {
-        return device._id.value;
+    public static createDevice(device: Device, x_coord: number, y_coord: number): Device {
+        device.coords = [x_coord, y_coord];
+        console.log(`${device.coords}`);
+        return device;
+    }
+
+    public static getIterator(): IterableIterator<Readonly<Device>> {
+        return this.DeviceList.values();
+    }
+
+    public static moveDevice(device: Device, new_x_coord: number, new_y_coord: number) {
+        device.coords = [new_x_coord, new_y_coord];
+    }
+
+    public static getDevice(x_coord: number, y_coord: number): Device {
+        return this.DeviceList.find((dev) =>
+            Math.abs(dev.coords[0] - x_coord) <= ICON_SIZE/2 &&
+            Math.abs(dev.coords[1] - y_coord) <= ICON_SIZE/2
+        );
     }
 
     /**
      * Deletes a device from the topology
-     * @param deviceId The ID of the device to delete as a number
+     * @param x_coord X-axis coordinate of the device to delete
+     * @param y_coord Y-axis coordinate of the device to delete
      * @returns boolean indicating whether a device with the given ID existed and was deleted
      */
-    public static deleteDevice(deviceId: number): boolean {
-        const device = this.DeviceList.itemFromId(new DeviceID(deviceId));
+    public static deleteDevice(x_coord: number, y_coord: number): boolean {
+        const device = this.getDevice(x_coord, y_coord);
         if (device !== undefined) {
             for (let l2inf of device._l2infs) {
                 InfMatrix.delete(l2inf);
@@ -393,7 +417,6 @@ export abstract class Device implements IdentifiedItem {
             // Note: no packet will be forwarded if it's an Echo Reply
             // (so this block can be deleted later)
             case IcmpControlMessage.ECHO_REPLY:
-                // check for an ICMP socket, see if this datagram matches its check function
                 console.log(`!! ICMP Reply Received! (there are ${this._sockets.getIcmpSockets().size} sockets)`)
                 return false;
         }
@@ -406,11 +429,15 @@ export abstract class Device implements IdentifiedItem {
         
         let hits = 0;
         let echo_num = 1;
-        if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {hits++}
+        if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {
+            hits++
+        }
         echo_num++;
         const interval = setInterval(async () => {
             if (echo_num <= count) {
-                if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {hits++}
+                if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {
+                    hits++
+                }
                 echo_num++;
             }
             else {
@@ -450,17 +477,17 @@ export abstract class Device implements IdentifiedItem {
                             this._sockets.deleteIcmpSocket(ping_socket);
                             clearInterval(interval);
                             console.log("---------- socket deleted ---------")
-                        }
-                        if (datagram_received) {
-                            let end = performance.now();
-                            const datagram = ping_socket.matched_top;
-                            console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
-                            resolve(datagram.type);
-                            return;
-                        }
-                        else if (timed_out) {
-                            resolve(undefined);
-                            return;
+                            if (datagram_received) {
+                                let end = performance.now();
+                                const datagram = ping_socket.matched_top;
+                                console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
+                                resolve(datagram.type);
+                                return;
+                            }
+                            else if (timed_out) {
+                                resolve(undefined);
+                                return;
+                            }
                         }
                         i++;
                     }, interval_length);
@@ -500,9 +527,9 @@ export class NetworkController {
     }
 }
 
-class PersonalComputer extends Device {
+export class PersonalComputer extends Device {
     public constructor() {
-        super();
+        super(DeviceType.PC);
         this._l3infs.push(new L3Interface(this._network_controller));
     }
 
@@ -534,9 +561,9 @@ class PersonalComputer extends Device {
     }
 }
 
-class Switch extends Device {
+export class Switch extends Device {
     public constructor(num_inf: number) {
-        super();
+        super(DeviceType.SWITCH);
         for (let i = 0; i < num_inf; i++) {
             this._l2infs.push(new L2Interface(this._network_controller));
         }
@@ -548,9 +575,9 @@ class Switch extends Device {
     }
 }
 
-class Router extends Device {
+export class Router extends Device {
     public constructor(num_inf: number) {
-        super();
+        super(DeviceType.ROUTER);
         for (let i = 0; i < num_inf; i++) {
             this._l3infs.push(new L3Interface(this._network_controller));
         }
@@ -598,4 +625,4 @@ async function test_icmp() {
 
     pc1.ping(pc2.ipv4, 4);
 }
-test_icmp();
+// test_icmp();

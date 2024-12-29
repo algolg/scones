@@ -1,5 +1,5 @@
-import { concat, divide, limit, padTo32BitWords, spread } from "./addressing";
-import { Ipv4Packet } from "./ip";
+import { concat, divide, limit, padTo32BitWords, spread } from "./addressing.js";
+import { Ipv4Packet } from "./ip.js";
 
 export enum IcmpControlMessage { ECHO_REPLY = 0, UNREACHABLE = 3, ECHO_REQUEST = 8, TIME_EXCEEDED = 11 }
 export enum IcmpUnreachableCode { NET = 0, HOST }

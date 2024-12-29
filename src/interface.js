@@ -1,9 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.L3Interface = exports.L2Interface = exports.InfMatrix = exports.IdentifiedList = void 0;
-const addressing_1 = require("./addressing");
-const arp_1 = require("./arp");
-const frame_1 = require("./frame");
+import { Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing.js";
+import { ArpPacket, OP } from "./arp.js";
+import { EtherType, Frame } from "./frame.js";
 var InfStatus;
 (function (InfStatus) {
     InfStatus[InfStatus["DOWN"] = 0] = "DOWN";
@@ -14,7 +11,7 @@ var InfLayer;
     InfLayer[InfLayer["L2"] = 2] = "L2";
     InfLayer[InfLayer["L3"] = 3] = "L3";
 })(InfLayer || (InfLayer = {}));
-class IdentifiedList extends Array {
+export class IdentifiedList extends Array {
     constructor() {
         super();
     }
@@ -98,7 +95,6 @@ class IdentifiedList extends Array {
         return undefined;
     }
 }
-exports.IdentifiedList = IdentifiedList;
 /**
  * Can IdentifiedList be rebuilt extending Map<T>?
  */
@@ -288,7 +284,7 @@ class InterfaceMatrix {
         console.log("---------------");
     }
 }
-exports.InfMatrix = new InterfaceMatrix();
+export const InfMatrix = new InterfaceMatrix();
 class Interface {
     constructor(network_controller, layer) {
         this._status = InfStatus.UP;
@@ -297,10 +293,10 @@ class Interface {
         this._layer = layer;
         let assigned = false;
         while (!assigned) {
-            const mac = addressing_1.MacAddress.rand();
-            if (!exports.InfMatrix.existsMac(mac)) {
+            const mac = MacAddress.rand();
+            if (!InfMatrix.existsMac(mac)) {
                 this._mac = mac;
-                exports.InfMatrix.push(this);
+                InfMatrix.push(this);
                 assigned = true;
             }
         }
@@ -336,7 +332,7 @@ class Interface {
         return this._layer == InfLayer.L3;
     }
     isActive() {
-        return this._status == InfStatus.UP && exports.InfMatrix.isConnected(this._mac);
+        return this._status == InfStatus.UP && InfMatrix.isConnected(this._mac);
     }
     /**
      * Sends a frame out of this interface
@@ -344,7 +340,7 @@ class Interface {
      */
     async send(frame) {
         console.log(`--> ${this._mac}: SE ${frame.src_mac} to ${frame.dest_mac}`);
-        await exports.InfMatrix.send(frame, this._mac);
+        await InfMatrix.send(frame, this._mac);
     }
     /**
      * Receives a frame from this interface
@@ -358,19 +354,18 @@ class Interface {
         this._network_controller.clearFib(this._mac);
     }
 }
-class L2Interface extends Interface {
+export class L2Interface extends Interface {
     constructor(network_controller) {
         super(network_controller, InfLayer.L2);
         this._vlan = 1;
     }
 }
-exports.L2Interface = L2Interface;
-class L3Interface extends Interface {
+export class L3Interface extends Interface {
     // private _ipv6: Ipv6Address; this won't work yet
     constructor(network_controller, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 0) {
         super(network_controller, InfLayer.L3);
-        this._ipv4 = new addressing_1.Ipv4Address(ipv4_arr);
-        this._ipv4_prefix = new addressing_1.Ipv4Prefix(ipv4_prefix);
+        this._ipv4 = new Ipv4Address(ipv4_arr);
+        this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);
     }
     set ipv4(ipv4) {
         this._ipv4.value = ipv4;
@@ -393,13 +388,12 @@ class L3Interface extends Interface {
      * @param ip the neighbor's IPv4 address
      */
     find(ip) {
-        const arppacket = new arp_1.ArpPacket(arp_1.OP.REQUEST, this._mac, this._ipv4, addressing_1.MacAddress.broadcast, ip);
-        const frame = new frame_1.Frame(addressing_1.MacAddress.broadcast, this._mac, frame_1.EtherType.ARP, arppacket.packet);
+        const arppacket = new ArpPacket(OP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
+        const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
         setTimeout(() => {
             this.send(frame);
         }, 10);
         return true;
     }
 }
-exports.L3Interface = L3Interface;
 //# sourceMappingURL=interface.js.map

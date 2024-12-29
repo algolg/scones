@@ -1,4 +1,4 @@
-import { MacAddress } from "./addressing";
+import { MacAddress } from "./addressing.js";
 
 export class ForwardingInformationBase {
     private _table: Map<string, MacAddress> = new Map();

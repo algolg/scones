@@ -1,15 +1,13 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.NetworkController = exports.Device = void 0;
-const addressing_js_1 = require("./addressing.js");
-const arp_js_1 = require("./arp.js");
-const forwarding_js_1 = require("./forwarding.js");
-const frame_js_1 = require("./frame.js");
-const icmp_js_1 = require("./icmp.js");
-const interface_js_1 = require("./interface.js");
-const ip_js_1 = require("./ip.js");
-const routing_js_1 = require("./routing.js");
-const socket_js_1 = require("./socket.js");
+import { Ipv4Address, DeviceID, Ipv4Prefix } from "./addressing.js";
+import { ArpPacket, ArpTable, OP } from "./arp.js";
+import { ForwardingInformationBase } from "./forwarding.js";
+import { EtherType, Frame } from "./frame.js";
+import { IcmpControlMessage, IcmpDatagram } from "./icmp.js";
+import { IdentifiedList, InfMatrix, L2Interface, L3Interface } from "./interface.js";
+import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
+import { RoutingTable } from "./routing.js";
+import { Socket, SocketTable } from "./socket.js";
+import { ICON_SIZE } from "./ui/variables.js";
 var IpResponse;
 (function (IpResponse) {
     IpResponse[IpResponse["SENT"] = 0] = "SENT";
@@ -17,24 +15,34 @@ var IpResponse;
     IpResponse[IpResponse["HOST_UNREACHABLE"] = 2] = "HOST_UNREACHABLE";
     IpResponse[IpResponse["NET_UNREACHABLE"] = 3] = "NET_UNREACHABLE";
 })(IpResponse || (IpResponse = {}));
-class Device {
-    constructor() {
-        this._forwarding_table = new forwarding_js_1.ForwardingInformationBase();
-        this._arp_table = new arp_js_1.ArpTable(); /* don't keep this public */
-        this._routing_table = new routing_js_1.RoutingTable();
+;
+export var DeviceType;
+(function (DeviceType) {
+    DeviceType[DeviceType["PC"] = 0] = "PC";
+    DeviceType[DeviceType["SERVER"] = 1] = "SERVER";
+    DeviceType[DeviceType["ROUTER"] = 2] = "ROUTER";
+    DeviceType[DeviceType["SWITCH"] = 3] = "SWITCH";
+})(DeviceType || (DeviceType = {}));
+;
+export class Device {
+    constructor(device_type) {
+        this._forwarding_table = new ForwardingInformationBase();
+        this._arp_table = new ArpTable(); /* don't keep this public */
+        this._routing_table = new RoutingTable();
         this._network_controller = new NetworkController(this);
         this._env = new Map();
-        this._sockets = new socket_js_1.SocketTable();
+        this._sockets = new SocketTable();
         this._l3infs = [];
         this._l2infs = [];
+        this.device_type = device_type;
         let assigned = false;
         while (!assigned) {
-            const devid = addressing_js_1.DeviceID.rand();
-            const device = new addressing_js_1.DeviceID(devid);
+            const devid = DeviceID.rand();
+            const device = new DeviceID(devid);
             if (!Device.DeviceList.existsId(device)) {
+                assigned = true;
                 this._id = device;
                 Device.DeviceList.push(this);
-                assigned = true;
             }
         }
     }
@@ -46,22 +54,35 @@ class Device {
      * @param device Device to add
      * @returns Device's ID as a number
      */
-    static createDevice(device) {
-        return device._id.value;
+    static createDevice(device, x_coord, y_coord) {
+        device.coords = [x_coord, y_coord];
+        console.log(`${device.coords}`);
+        return device;
+    }
+    static getIterator() {
+        return this.DeviceList.values();
+    }
+    static moveDevice(device, new_x_coord, new_y_coord) {
+        device.coords = [new_x_coord, new_y_coord];
+    }
+    static getDevice(x_coord, y_coord) {
+        return this.DeviceList.find((dev) => Math.abs(dev.coords[0] - x_coord) <= ICON_SIZE / 2 &&
+            Math.abs(dev.coords[1] - y_coord) <= ICON_SIZE / 2);
     }
     /**
      * Deletes a device from the topology
-     * @param deviceId The ID of the device to delete as a number
+     * @param x_coord X-axis coordinate of the device to delete
+     * @param y_coord Y-axis coordinate of the device to delete
      * @returns boolean indicating whether a device with the given ID existed and was deleted
      */
-    static deleteDevice(deviceId) {
-        const device = this.DeviceList.itemFromId(new addressing_js_1.DeviceID(deviceId));
+    static deleteDevice(x_coord, y_coord) {
+        const device = this.getDevice(x_coord, y_coord);
         if (device !== undefined) {
             for (let l2inf of device._l2infs) {
-                interface_js_1.InfMatrix.delete(l2inf);
+                InfMatrix.delete(l2inf);
             }
             for (let l3inf of device._l3infs) {
-                interface_js_1.InfMatrix.delete(l3inf);
+                InfMatrix.delete(l3inf);
             }
             Device.DeviceList.delete(device);
             return true;
@@ -100,7 +121,7 @@ class Device {
             if (l3inf.ipv4.compare(ipv4_dest) == 0) {
                 // packets a device sends to itself would really be sent/received by the loopback interface
                 // (could be implemented later on)
-                l3inf.receive(new frame_js_1.Frame(l3inf.mac, l3inf.mac, frame_js_1.EtherType.IPv4, packet.packet), l3inf.mac);
+                l3inf.receive(new Frame(l3inf.mac, l3inf.mac, EtherType.IPv4, packet.packet), l3inf.mac);
                 return IpResponse.SENT;
             }
             // if the subnet of the packet matches the subnet of one of this device's infs,
@@ -110,7 +131,7 @@ class Device {
                 const try_mac = this._arp_table.get(ipv4_dest);
                 if (try_mac !== undefined) {
                     setTimeout(() => {
-                        l3inf.send(new frame_js_1.Frame(try_mac[0], l3inf.mac, frame_js_1.EtherType.IPv4, packet.packet));
+                        l3inf.send(new Frame(try_mac[0], l3inf.mac, EtherType.IPv4, packet.packet));
                     }, 10);
                     return IpResponse.SENT;
                 }
@@ -134,7 +155,7 @@ class Device {
                 const try_mac = this._arp_table.get(next_hop);
                 if (try_mac !== undefined) {
                     setTimeout(() => {
-                        inf.send(new frame_js_1.Frame(try_mac[0], inf.mac, frame_js_1.EtherType.IPv4, packet.packet));
+                        inf.send(new Frame(try_mac[0], inf.mac, EtherType.IPv4, packet.packet));
                     }, 10);
                     return IpResponse.SENT;
                 }
@@ -205,14 +226,14 @@ class Device {
             // many protocols only apply to L3 devices (generalize to devices with L3 ports)
             if (should_process.value) {
                 switch (ethertype) {
-                    case frame_js_1.EtherType.ARP: if (this.hasL3Infs()) {
-                        const packet = arp_js_1.ArpPacket.parsePacket(frame.packet);
+                    case EtherType.ARP: if (this.hasL3Infs()) {
+                        const packet = ArpPacket.parsePacket(frame.packet);
                         this.processARP(packet, ingress_mac, should_forward);
                         break;
                     }
-                    case frame_js_1.EtherType.IPv4: if (this.hasL3Infs()) {
-                        const packet = ip_js_1.Ipv4Packet.parsePacket(frame.packet);
-                        if (ip_js_1.Ipv4Packet.verifyChecksum(packet)) {
+                    case EtherType.IPv4: if (this.hasL3Infs()) {
+                        const packet = Ipv4Packet.parsePacket(frame.packet);
+                        if (Ipv4Packet.verifyChecksum(packet)) {
                             console.log("IPv4 checksum verification succeeded!");
                             this.processIpv4(packet, ingress_mac);
                         }
@@ -222,7 +243,7 @@ class Device {
                         }
                         break;
                     }
-                    case frame_js_1.EtherType.IPv6:
+                    case EtherType.IPv6:
                     default:
                         break;
                 }
@@ -284,11 +305,11 @@ class Device {
             if (!merge) {
                 this._arp_table.set(arp_request.src_pa, arp_request.src_ha, ingress_mac);
             }
-            if (op == arp_js_1.OP.REQUEST) {
+            if (op == OP.REQUEST) {
                 console.log(`${this._l3infs[0].mac}: replying for ARP`);
                 should_forward.value = false;
                 const arp_reply = arp_request.makeReply(try_inf.mac);
-                const frame = new frame_js_1.Frame(arp_reply.dest_ha, try_inf.mac, frame_js_1.EtherType.ARP, arp_reply.packet);
+                const frame = new Frame(arp_reply.dest_ha, try_inf.mac, EtherType.ARP, arp_reply.packet);
                 await this.getInfFromMac(try_inf.mac).send(frame);
             }
         }
@@ -296,9 +317,9 @@ class Device {
     async processIpv4(ipv4_packet, ingress_mac) {
         // RFC 1812 5.2.1 may be used as a guide
         switch (ipv4_packet.protocol) {
-            case ip_js_1.InternetProtocolNumbers.ICMP:
-                const icmp_datagram = icmp_js_1.IcmpDatagram.parse(ipv4_packet.data);
-                if (icmp_js_1.IcmpDatagram.verifyChecksum(icmp_datagram)) {
+            case InternetProtocolNumbers.ICMP:
+                const icmp_datagram = IcmpDatagram.parse(ipv4_packet.data);
+                if (IcmpDatagram.verifyChecksum(icmp_datagram)) {
                     console.log("ICMP checksum verification succeeded!");
                     this.processICMP(icmp_datagram, ipv4_packet);
                     return true;
@@ -307,13 +328,13 @@ class Device {
                     console.log("ICMP checksum verification failed!");
                 }
                 break;
-            case ip_js_1.InternetProtocolNumbers.TCP:
+            case InternetProtocolNumbers.TCP:
                 break;
-            case ip_js_1.InternetProtocolNumbers.UDP:
+            case InternetProtocolNumbers.UDP:
                 break;
         }
         if (!this.hasInfWithIpv4(ipv4_packet.dest)) {
-            if (this.tryEncapsulateAndSend(ip_js_1.Ipv4Packet.copyAndDecrement(ipv4_packet)) == IpResponse.SENT) {
+            if (this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(ipv4_packet)) == IpResponse.SENT) {
                 return true;
             }
         }
@@ -332,29 +353,28 @@ class Device {
         // if this device is not the destination, try to forward the request
         // return ICMP errors if any arise
         if (!this.hasInfWithIpv4(ipv4_packet.dest)) {
-            const sent = this.tryEncapsulateAndSend(ip_js_1.Ipv4Packet.copyAndDecrement(ipv4_packet));
+            const sent = this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(ipv4_packet));
             switch (sent) {
                 case IpResponse.SENT:
                     return true;
                 case IpResponse.HOST_UNREACHABLE:
-                    return this.tryEncapsulateAndSend(new ip_js_1.Ipv4Packet(0, 0, 64, ip_js_1.InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], icmp_js_1.IcmpDatagram.hostUnreachable(icmp_datagram, ipv4_packet).datagram)) == IpResponse.SENT;
+                    return this.tryEncapsulateAndSend(new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], IcmpDatagram.hostUnreachable(icmp_datagram, ipv4_packet).datagram)) == IpResponse.SENT;
                 case IpResponse.NET_UNREACHABLE:
-                    return this.tryEncapsulateAndSend(new ip_js_1.Ipv4Packet(0, 0, 64, ip_js_1.InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], icmp_js_1.IcmpDatagram.netUnreachable(icmp_datagram, ipv4_packet).datagram)) == IpResponse.SENT;
+                    return this.tryEncapsulateAndSend(new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], IcmpDatagram.netUnreachable(icmp_datagram, ipv4_packet).datagram)) == IpResponse.SENT;
                 case IpResponse.TIME_EXCEEDED:
-                    return this.tryEncapsulateAndSend(new ip_js_1.Ipv4Packet(0, 0, 64, ip_js_1.InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], icmp_js_1.IcmpDatagram.timeExceeded(icmp_datagram, ipv4_packet).datagram)) == IpResponse.SENT;
+                    return this.tryEncapsulateAndSend(new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], IcmpDatagram.timeExceeded(icmp_datagram, ipv4_packet).datagram)) == IpResponse.SENT;
             }
         }
         // otherwise, process the packet thoroughly
         switch (icmp_datagram.type) {
             // if the datagram is an Echo Request, send a reply
-            case icmp_js_1.IcmpControlMessage.ECHO_REQUEST:
+            case IcmpControlMessage.ECHO_REQUEST:
                 console.log(`!! ICMP Request Received!`);
-                const sent = this.tryEncapsulateAndSend(new ip_js_1.Ipv4Packet(0, 0, 64, ip_js_1.InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], icmp_js_1.IcmpDatagram.echoReply(icmp_datagram).datagram));
+                const sent = this.tryEncapsulateAndSend(new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], IcmpDatagram.echoReply(icmp_datagram).datagram));
                 return sent == IpResponse.SENT;
             // Note: no packet will be forwarded if it's an Echo Reply
             // (so this block can be deleted later)
-            case icmp_js_1.IcmpControlMessage.ECHO_REPLY:
-                // check for an ICMP socket, see if this datagram matches its check function
+            case IcmpControlMessage.ECHO_REPLY:
                 console.log(`!! ICMP Reply Received! (there are ${this._sockets.getIcmpSockets().size} sockets)`);
                 return false;
         }
@@ -365,13 +385,13 @@ class Device {
         this._env.set('PING_SEQ', id.toString());
         let hits = 0;
         let echo_num = 1;
-        if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === icmp_js_1.IcmpControlMessage.ECHO_REPLY) {
+        if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {
             hits++;
         }
         echo_num++;
         const interval = setInterval(async () => {
             if (echo_num <= count) {
-                if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === icmp_js_1.IcmpControlMessage.ECHO_REPLY) {
+                if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {
                     hits++;
                 }
                 echo_num++;
@@ -393,11 +413,11 @@ class Device {
     async icmpEcho(dest_ipv4, id = 1, seq_num = 1, ttl = 255) {
         return new Promise((resolve) => {
             if (this.hasL3Infs()) {
-                const icmp_request = icmp_js_1.IcmpDatagram.echoRequest(id, seq_num);
-                const packet = new ip_js_1.Ipv4Packet(0, 0, ttl, ip_js_1.InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram);
+                const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
+                const packet = new Ipv4Packet(0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram);
                 if (this.tryEncapsulateAndSend(packet) == IpResponse.SENT) {
                     let start = performance.now();
-                    const ping_socket = socket_js_1.Socket.icmpSocketFrom(icmp_request, packet);
+                    const ping_socket = Socket.icmpSocketFrom(icmp_request, packet);
                     this._sockets.addIcmpSocket(ping_socket);
                     console.log("----------- socket added ----------");
                     let i = 0;
@@ -409,23 +429,23 @@ class Device {
                             this._sockets.deleteIcmpSocket(ping_socket);
                             clearInterval(interval);
                             console.log("---------- socket deleted ---------");
-                        }
-                        if (datagram_received) {
-                            let end = performance.now();
-                            const datagram = ping_socket.matched_top;
-                            console.log(`received ICMP ${icmp_js_1.IcmpControlMessage[datagram.type]} in ${end - start}`);
-                            resolve(datagram.type);
-                            return;
-                        }
-                        else if (timed_out) {
-                            resolve(undefined);
-                            return;
+                            if (datagram_received) {
+                                let end = performance.now();
+                                const datagram = ping_socket.matched_top;
+                                console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
+                                resolve(datagram.type);
+                                return;
+                            }
+                            else if (timed_out) {
+                                resolve(undefined);
+                                return;
+                            }
                         }
                         i++;
                     }, interval_length);
                 }
                 else {
-                    resolve(icmp_js_1.IcmpControlMessage.UNREACHABLE);
+                    resolve(IcmpControlMessage.UNREACHABLE);
                 }
             }
             else {
@@ -434,12 +454,11 @@ class Device {
         });
     }
 }
-exports.Device = Device;
-Device.DeviceList = new interface_js_1.IdentifiedList();
+Device.DeviceList = new IdentifiedList();
 /**
  * Acts as a middle-man between the network interfaces and the device itself
  */
-class NetworkController {
+export class NetworkController {
     constructor(device) {
         this._device = device;
     }
@@ -454,11 +473,10 @@ class NetworkController {
         this._device.clearFib(mac);
     }
 }
-exports.NetworkController = NetworkController;
-class PersonalComputer extends Device {
+export class PersonalComputer extends Device {
     constructor() {
-        super();
-        this._l3infs.push(new interface_js_1.L3Interface(this._network_controller));
+        super(DeviceType.PC);
+        this._l3infs.push(new L3Interface(this._network_controller));
     }
     set ipv4(ipv4) {
         this._l3infs[0].ipv4.value = ipv4;
@@ -474,28 +492,28 @@ class PersonalComputer extends Device {
         return this._l3infs[0];
     }
     set default_gateway(gateway) {
-        this._routing_table.set(new addressing_js_1.Ipv4Address([0, 0, 0, 0]), new addressing_js_1.Ipv4Prefix(0), new addressing_js_1.Ipv4Address(gateway), this._l3infs[0].ipv4, 1);
+        this._routing_table.set(new Ipv4Address([0, 0, 0, 0]), new Ipv4Prefix(0), new Ipv4Address(gateway), this._l3infs[0].ipv4, 1);
     }
 }
-class Switch extends Device {
+export class Switch extends Device {
     constructor(num_inf) {
-        super();
+        super(DeviceType.SWITCH);
         for (let i = 0; i < num_inf; i++) {
-            this._l2infs.push(new interface_js_1.L2Interface(this._network_controller));
+            this._l2infs.push(new L2Interface(this._network_controller));
         }
-        interface_js_1.InfMatrix.link(...this._l2infs.map((x) => x.mac));
+        InfMatrix.link(...this._l2infs.map((x) => x.mac));
     }
     get l2infs() {
         return this._l2infs;
     }
 }
-class Router extends Device {
+export class Router extends Device {
     constructor(num_inf) {
-        super();
+        super(DeviceType.ROUTER);
         for (let i = 0; i < num_inf; i++) {
-            this._l3infs.push(new interface_js_1.L3Interface(this._network_controller));
+            this._l3infs.push(new L3Interface(this._network_controller));
         }
-        interface_js_1.InfMatrix.link(...this._l3infs.map((x) => x.mac));
+        InfMatrix.link(...this._l3infs.map((x) => x.mac));
     }
     get l3infs() {
         return this._l3infs;
@@ -525,11 +543,11 @@ async function test_icmp() {
     console.log(`sw2[1]:\t${sw2.l2infs[1].mac}`);
     console.log(`ro1[0]:\t${ro1.l3infs[0].mac}`);
     console.log(`ro1[1]:\t${ro1.l3infs[1].mac}`);
-    interface_js_1.InfMatrix.connect(pc1.inf.mac, sw1.l2infs[0].mac);
-    interface_js_1.InfMatrix.connect(sw1.l2infs[1].mac, ro1.l3infs[0].mac);
-    interface_js_1.InfMatrix.connect(ro1.l3infs[1].mac, sw2.l2infs[1].mac);
-    interface_js_1.InfMatrix.connect(sw2.l2infs[0].mac, pc2.inf.mac);
+    InfMatrix.connect(pc1.inf.mac, sw1.l2infs[0].mac);
+    InfMatrix.connect(sw1.l2infs[1].mac, ro1.l3infs[0].mac);
+    InfMatrix.connect(ro1.l3infs[1].mac, sw2.l2infs[1].mac);
+    InfMatrix.connect(sw2.l2infs[0].mac, pc2.inf.mac);
     pc1.ping(pc2.ipv4, 4);
 }
-test_icmp();
+// test_icmp();
 //# sourceMappingURL=device.js.map
