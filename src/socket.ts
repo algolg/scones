@@ -69,7 +69,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
                     && echo_packet.dest.compare(ipv4_packet.src) == 0
                 ) || (
                     !icmp_datagram.isEchoReply && !icmp_datagram.isEchoRequest &&
-                    icmp_datagram.data.every((x,idx) => x == echo_packet.packet[idx])
+                    icmp_datagram.data.slice(echo_packet.ihl * 4).every((x,idx) => x == echo_packet.data[idx])
                 );
             },
         )

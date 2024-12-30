@@ -204,35 +204,6 @@ class InterfaceMatrix {
     }
 
     /**
-     * NOTE: Consider moving away from this function. It is unrealistic.
-     * Ideally, an ARP broadcast would be modeled by ensuring that each device, upon receiving a broadcast frame,
-     *       forwards the broadcast frame out of all ports (in the broadcast domain) except for the ingress.
-     * Hence, the network will not "know" what the whole broadcast domain is, but the broadcast will operate.
-     * i think...
-     * This function would also (probably) have to be recursive, which I don't really want.
-     * Could instead use Promise.all(...) to forward/send broadcast out of all (non-ingress) interfaces.
-     * @param mac 
-     * @returns 
-     */
-    public getBroadcastDomain(mac: MacAddress): Interface[] {
-        const inf: Interface = this._list.itemFromId(mac);
-        /**
-         * broadcast domain is made up of:
-         *  - L2 ports on the same device, on the same VLAN
-         *  - neighboring L2 ports on the same VLAN
-         *  - neighboring L3 ports on the same subnet
-         */
-        const linked_neighbors = this.getLinkedInfs(mac).filter((x) => x.layer == InfLayer.L2 && x.vlan == inf.vlan);
-        const direct_neighbor = [this.getNeighborInf(mac)].filter((x) =>
-                ((x.layer == InfLayer.L2 && inf.layer == InfLayer.L2) && x.vlan == inf.vlan) ||
-                ((x.layer == InfLayer.L2 && inf.layer == InfLayer.L3)) ||
-                ((x.layer == InfLayer.L3 && inf.layer == InfLayer.L2))
-        );
-        return [...linked_neighbors, ...direct_neighbor];
-
-    }
-
-    /**
      * Connect two interfaces together, as though with a cable
      * @param firstMac the MAC address of the first interface
      * @param secondMac the MAC address of the second interface
@@ -304,6 +275,18 @@ class InterfaceMatrix {
         await recipient_inf.receive(frame, recipient_inf.mac);
     }
 
+    public get adjacency_list(): [Interface, Interface][] {
+        let adjacency_list: [Interface, Interface][] = [];
+        for (let i = 0; i < this._list.length; i++) {
+            for (let j = 0; j < i; j++) {
+                if (this._matrix[i][j] == 1) {
+                    adjacency_list.push([this._list[i], this._list[j]]);
+                }
+            }
+        }
+        return adjacency_list;
+    }
+
     private printMatrix() {
         console.log("---------------")
         for (var line of this._matrix) {
@@ -327,17 +310,22 @@ abstract class Interface implements IdentifiedItem {
     protected readonly _layer: InfLayer;
     protected readonly _network_controller: NetworkController;
 
-    public constructor(network_controller: NetworkController, layer: InfLayer) {
+    public constructor(network_controller: NetworkController, layer: InfLayer, mac?: MacAddress, tracked: boolean = true) {
         this._network_controller = network_controller;
         this._layer = layer;
-        let assigned = false;
-        while (!assigned) {
-            const mac = MacAddress.rand();
-            if (!InfMatrix.existsMac(mac)) {
-                this._mac = mac;
-                InfMatrix.push(this);
-                assigned = true;
+        if (tracked) {
+            let assigned = false;
+            while (!assigned) {
+                const mac = MacAddress.rand();
+                if (!InfMatrix.existsMac(mac)) {
+                    this._mac = mac;
+                    InfMatrix.push(this);
+                    assigned = true;
+                }
             }
+        }
+        else {
+            this._mac = mac;
         }
     }
 
@@ -418,8 +406,8 @@ export class L3Interface extends Interface {
     private _ipv4_prefix: Ipv4Prefix;
     // private _ipv6: Ipv6Address; this won't work yet
 
-    public constructor(network_controller: NetworkController, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0) {
-        super(network_controller, InfLayer.L3);
+    public constructor(network_controller: NetworkController, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0, mac?: MacAddress, tracked: boolean = true) {
+        super(network_controller, InfLayer.L3, mac, tracked);
         this._ipv4 = new Ipv4Address(ipv4_arr);
         this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);
     }
@@ -457,4 +445,27 @@ export class L3Interface extends Interface {
         }, 10)
         return true;
     }
+}
+
+export class VirtualL3Interface extends L3Interface {
+
+    public constructor(network_controller: NetworkController, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0, mac: MacAddress) {
+        super(network_controller, ipv4_arr, ipv4_prefix, mac, false);
+    }
+
+    public async send(frame: Frame): Promise<void> {
+        this.receive(frame, this.mac);
+        return;
+    }
+    public async receive(frame: Frame, ingress_mac: MacAddress): Promise<void> {
+        this._network_controller.receive(frame, ingress_mac);
+        return;
+    }
+
+    public static newLoopback(network_controller: NetworkController) {
+        return new VirtualL3Interface(
+            network_controller, [127,0,0,1], 8, MacAddress.loopback
+        );
+    }
+
 }

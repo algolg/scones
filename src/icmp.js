@@ -43,14 +43,14 @@ export class IcmpDatagram {
     static echoReply(echo_request) {
         return new IcmpDatagram(IcmpControlMessage.ECHO_REPLY, 0, echo_request.extra_space.toArray(), echo_request.data.toArray());
     }
-    static hostUnreachable(echo_request, ipv4_packet) {
-        return new IcmpDatagram(IcmpControlMessage.UNREACHABLE, IcmpUnreachableCode.HOST, [], concat(ipv4_packet.header, echo_request.datagram.slice(0, 64)).toArray());
+    static hostUnreachable(ipv4_packet) {
+        return new IcmpDatagram(IcmpControlMessage.UNREACHABLE, IcmpUnreachableCode.HOST, [], concat(ipv4_packet.header, ipv4_packet.data.slice(0, 64)).toArray());
     }
-    static netUnreachable(echo_request, ipv4_packet) {
-        return new IcmpDatagram(IcmpControlMessage.UNREACHABLE, IcmpUnreachableCode.NET, [], concat(ipv4_packet.header, echo_request.datagram.slice(0, 64)).toArray());
+    static netUnreachable(ipv4_packet) {
+        return new IcmpDatagram(IcmpControlMessage.UNREACHABLE, IcmpUnreachableCode.NET, [], concat(ipv4_packet.header, ipv4_packet.data.slice(0, 64)).toArray());
     }
-    static timeExceeded(echo_request, ipv4_packet) {
-        return new IcmpDatagram(IcmpControlMessage.TIME_EXCEEDED, 0, [], concat(ipv4_packet.header, echo_request.datagram.slice(0, 64)).toArray());
+    static timeExceeded(ipv4_packet) {
+        return new IcmpDatagram(IcmpControlMessage.TIME_EXCEEDED, 0, [], concat(ipv4_packet.header, ipv4_packet.data.slice(0, 64)).toArray());
     }
     static verifyChecksum(datagram) {
         return Ipv4Packet.calculateChecksum(datagram.datagram) == 0;

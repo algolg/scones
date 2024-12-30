@@ -73,10 +73,14 @@ export class ArpPacket {
 ArpPacket._lengths = [16, 16, 8, 8, 16, 48, 32, 48, 32];
 export class ArpTable {
     constructor() {
+        this._local_infs = [];
         this._table = new Map();
     }
     keyToString(ethertype, ip) {
         return `${ethertype}${ip}`;
+    }
+    setLocalInfs(...l3infs) {
+        l3infs.forEach((l3inf) => this._local_infs.push(l3inf.ipv4));
     }
     set(ip, remote_mac, local_mac) {
         console.log(`!! ${local_mac}: adding ${ip} (${remote_mac}) to my ARP table`);
@@ -85,7 +89,15 @@ export class ArpTable {
     delete(ip) {
         return this._table.delete(this.keyToString(ip.ethertype, ip));
     }
+    /**
+     * Returns an ARP table entry for a given IP address
+     * @param ip the IP address to get the ARP entry of
+     * @returns (remote MAC, local MAC) pair, if one exists. undefined otherwise
+     */
     get(ip) {
+        if (this._local_infs.some((inf) => inf !== undefined && inf.compare(ip) == 0)) {
+            return [MacAddress.loopback, MacAddress.loopback];
+        }
         return this._table.get(this.keyToString(ip.ethertype, ip));
     }
     has(ip) {

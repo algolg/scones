@@ -1,5 +1,6 @@
-import { GeneralIpAddress, Ipv4Address, MacAddress, concat, divide, spread } from "./addressing.js";
+import { Ipv4Address, MacAddress, concat, divide, spread } from "./addressing.js";
 import { EtherType } from "./frame.js";
+import { L3Interface } from "./interface.js";
 import { Packet } from "./packet.js";
 
 enum HTYPE { ETHERNET = 1 }
@@ -94,23 +95,37 @@ export class ArpPacket implements Packet {
 }
 
 export class ArpTable {
+    private _local_infs: Ipv4Address[] = [];
     private _table: Map<string,[MacAddress, MacAddress]> = new Map();
 
-    private keyToString(ethertype: EtherType, ip: GeneralIpAddress): string {
+    private keyToString(ethertype: EtherType, ip: Ipv4Address): string {
         return `${ethertype}${ip}`;
     }
 
-    public set(ip: GeneralIpAddress, remote_mac: MacAddress, local_mac: MacAddress) {
+    public setLocalInfs(...l3infs: L3Interface[]) {
+        l3infs.forEach((l3inf) => this._local_infs.push(l3inf.ipv4));
+    }
+
+    public set(ip: Ipv4Address, remote_mac: MacAddress, local_mac: MacAddress) {
         console.log(`!! ${local_mac}: adding ${ip} (${remote_mac}) to my ARP table`)
         this._table.set(this.keyToString(ip.ethertype, ip), [remote_mac, local_mac]);
     }
-    public delete(ip: GeneralIpAddress): boolean {
+    public delete(ip: Ipv4Address): boolean {
         return this._table.delete(this.keyToString(ip.ethertype, ip));
     }
-    public get(ip: GeneralIpAddress): [MacAddress, MacAddress] {
+    
+    /**
+     * Returns an ARP table entry for a given IP address
+     * @param ip the IP address to get the ARP entry of
+     * @returns (remote MAC, local MAC) pair, if one exists. undefined otherwise
+     */
+    public get(ip: Ipv4Address): [MacAddress, MacAddress] {
+        if (this._local_infs.some((inf) => inf !== undefined && inf.compare(ip) == 0)) {
+            return [MacAddress.loopback, MacAddress.loopback];
+        }
         return this._table.get(this.keyToString(ip.ethertype, ip));
     }
-    public has(ip: GeneralIpAddress): boolean {
+    public has(ip: Ipv4Address): boolean {
         return this._table.has(this.keyToString(ip.ethertype, ip));
     }
 

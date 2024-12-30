@@ -59,7 +59,7 @@ export class Socket {
             return (icmp_datagram.matchesRequest(echo_request)
                 && echo_packet.src.compare(ipv4_packet.dest) == 0
                 && echo_packet.dest.compare(ipv4_packet.src) == 0) || (!icmp_datagram.isEchoReply && !icmp_datagram.isEchoRequest &&
-                icmp_datagram.data.every((x, idx) => x == echo_packet.packet[idx]));
+                icmp_datagram.data.slice(echo_packet.ihl * 4).every((x, idx) => x == echo_packet.data[idx]));
         });
     }
 }

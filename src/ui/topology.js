@@ -10,7 +10,6 @@ let draggable = false;
 let focusedDevice;
 canvas.onmousedown = (e) => {
     if (0 <= e.offsetX && e.offsetX <= width && 0 <= e.offsetY && e.offsetY <= height) {
-        console.log(e.offsetX, e.offsetY);
         current_click_func(e.offsetX, e.offsetY);
     }
 };
@@ -41,7 +40,30 @@ function selectDevice(x, y) {
         focusedDevice = device;
     }
 }
-export function create(name) {
+function deleteDevice(x, y) {
+    document.body.style.cursor = 'crosshair';
+    if (Device.deleteDevice(x, y)) {
+        console.log("deleted");
+        resetCanvas();
+        resetMode();
+    }
+    focusedDevice = undefined;
+}
+function connectDevices(x, y) {
+    if (focusedDevice === undefined) {
+        focusedDevice = Device.getDevice(x, y);
+    }
+    else {
+        Device.connectDevices(focusedDevice, Device.getDevice(x, y));
+        resetCanvas();
+    }
+}
+function connect() {
+    focusedDevice = undefined;
+    document.body.style.cursor = 'crosshair';
+    current_click_func = connectDevices;
+}
+function create(name) {
     document.body.style.cursor = 'crosshair';
     switch (name.toUpperCase()) {
         case ("PC"):
