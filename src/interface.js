@@ -6,7 +6,7 @@ var InfStatus;
     InfStatus[InfStatus["DOWN"] = 0] = "DOWN";
     InfStatus[InfStatus["UP"] = 1] = "UP";
 })(InfStatus || (InfStatus = {}));
-var InfLayer;
+export var InfLayer;
 (function (InfLayer) {
     InfLayer[InfLayer["L2"] = 2] = "L2";
     InfLayer[InfLayer["L3"] = 3] = "L3";
@@ -136,10 +136,6 @@ class InterfaceMatrix {
     existsMac(mac) {
         return this._list.existsId(mac);
     }
-    // private this later
-    get list() {
-        return this._list;
-    }
     getRow(mac) {
         return this._matrix[this._list.indexOfId(mac)];
     }
@@ -159,10 +155,18 @@ class InterfaceMatrix {
      * @returns All linked interfaces, if any
      */
     getLinkedInfs(mac) {
-        return this.getRow(mac).filter((x) => x == 2).map((x) => this._list[x]);
+        const row = this.getRow(mac);
+        if (row !== undefined) {
+            return row.filter((x) => x == 2).map((x) => this._list[x]);
+        }
+        return [];
     }
     numLinks(mac) {
-        return this.getRow(mac).reduce((accumulator, currentValue) => (currentValue == 2 ? accumulator + 1 : accumulator), 0);
+        const row = this.getRow(mac);
+        if (row !== undefined) {
+            return row.reduce((accumulator, currentValue) => (currentValue == 2 ? accumulator + 1 : accumulator), 0);
+        }
+        return -1;
     }
     /**
      * Determines whether an interface is currently connected to another interface
@@ -170,7 +174,11 @@ class InterfaceMatrix {
      * @returns true if the interface is connected to some other interface, false otherwise
      */
     isConnected(mac) {
-        return this.getRow(mac).some((x) => x == 1);
+        const row = this.getRow(mac);
+        if (row !== undefined) {
+            return row.some((x) => x == 1);
+        }
+        return false;
     }
     /**
      * Determines whether two interfaces are connected to one another
@@ -272,11 +280,12 @@ class InterfaceMatrix {
 }
 export const InfMatrix = new InterfaceMatrix();
 class Interface {
-    constructor(network_controller, layer, mac, tracked = true) {
+    constructor(network_controller, layer, num, mac, tracked = true) {
         this._status = InfStatus.UP;
         this._vlan = null;
         this._network_controller = network_controller;
         this._layer = layer;
+        this.num = num;
         if (tracked) {
             let assigned = false;
             while (!assigned) {
@@ -309,6 +318,9 @@ class Interface {
     }
     get layer() {
         return this._layer;
+    }
+    get coords() {
+        return this._network_controller.coords;
     }
     set status(status) {
         this._status = status;
@@ -346,15 +358,15 @@ class Interface {
     }
 }
 export class L2Interface extends Interface {
-    constructor(network_controller) {
-        super(network_controller, InfLayer.L2);
+    constructor(network_controller, num) {
+        super(network_controller, InfLayer.L2, num);
         this._vlan = 1;
     }
 }
 export class L3Interface extends Interface {
     // private _ipv6: Ipv6Address; this won't work yet
-    constructor(network_controller, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 0, mac, tracked = true) {
-        super(network_controller, InfLayer.L3, mac, tracked);
+    constructor(network_controller, num, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 0, mac, tracked = true) {
+        super(network_controller, InfLayer.L3, num, mac, tracked);
         this._ipv4 = new Ipv4Address(ipv4_arr);
         this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);
     }
@@ -389,7 +401,7 @@ export class L3Interface extends Interface {
 }
 export class VirtualL3Interface extends L3Interface {
     constructor(network_controller, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 0, mac) {
-        super(network_controller, ipv4_arr, ipv4_prefix, mac, false);
+        super(network_controller, -1, ipv4_arr, ipv4_prefix, mac, false);
     }
     async send(frame) {
         this.receive(frame, this.mac);

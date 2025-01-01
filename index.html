@@ -4,32 +4,91 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans&display=swap" rel="stylesheet">
     <title>netsim</title>
 </head>
 <body>
     <content>
         <div id="topology">
-            <canvas id="canvas" width="1200px" height="1000px">
-
-            </canvas>
+            <canvas id="canvas" width="1200px" height="1000px"></canvas>
         </div>
-        <div id="info-panel"></div>
+        <div id="configure-panel">
+            <div class="config-option">
+                <input id="eth${id_num}-dropdown" class="option-dropdown" type="checkbox">
+                <label for="eth${id_num}-dropdown" class="option-dropdown-label">
+                    <div class="name">eth${id_num}</div>
+                    <div class="info-1">${is_active}</div>
+                    <div class="info-2">${layer}</div>
+                </label>
+                <div class="option-dropdown-contents">
+                    <div>Mac Address: ${mac}</div>
+                    <div>
+                        <form class="option-form">
+                            <label for="ipv4-address">IPv4 Address</label>
+                            <input name="ipv4-address" class="mono" type="text" value="${ipv4_address ?? ''}"/>
+                            <label for="ipv4-prefix">IPv4 Prefix</label>
+                            <input name="ipv4-prefix" class="mono" type="number" min="0" max="30" value="${ipv4_prefix}"/>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div id="selector-panel">
-            <button onclick="create('PC')" class="selector-option" title="Add a PC">
-                <img src="assets/icons/pc.svg"/>
+            <div class="selector-panel-column">
+                <div>
+                    <button onclick="connectMode()" class="selector-option" title="Connect Devices">
+                        <img src="assets/icons/connect.svg" draggable="false"/>
+                    </button>
+                </div>
+                <div>
+                    <button onclick="deleteMode()" class="selector-option" title="Delete">
+                        <img src="assets/icons/delete.svg" draggable="false"/>
+                    </button>
+                </div>
+            </div>
+            <div class="selector-panel-column">
+                <div>
+                    <button onclick="resetMode()" class="selector-option" title="Select">
+                        <img src="assets/icons/cursor.svg" draggable="false"/>
+                    </button>
+                </div>
+                <div>
+                    <button onclick="" class="selector-option" title="Information">
+                        <img src="assets/icons/information.svg" draggable="false"/>
+                    </button>
+                </div>
+            </div>
+            <button onclick="createMode('PC')" class="selector-option" title="Add a PC">
+                <img src="assets/icons/pc.svg" draggable="false"/>
             </button>
-            <button onclick="create('SERVER')" class="selector-option" title="Add a Server">
-                <img src="assets/icons/server.svg"/>
+            <button onclick="createMode('SERVER')" class="selector-option" title="Add a Server">
+                <img src="assets/icons/server.svg" draggable="false"/>
             </button>
-            <button onclick="create('ROUTER')" class="selector-option" title="Add a Router">
-                <img src="assets/icons/router.svg"/>
+            <button onclick="createMode('ROUTER')" class="selector-option" title="Add a Router">
+                <img src="assets/icons/router.svg" draggable="false"/>
             </button>
-            <button onclick="create('SWITCH')" class="selector-option" title="Add a Switch">
-                <img src="assets/icons/switch.svg"/>
+            <button onclick="createMode('SWITCH')" class="selector-option" title="Add a Switch">
+                <img src="assets/icons/switch.svg" draggable="false"/>
             </button>
+
+            <div class="selector-panel-column right-align">
+                <div>
+                    <button onclick="incIconSize()" class="selector-option" title="Increase Icon Size">
+                        <img src="assets/icons/zoom-in.svg" draggable="false"/>
+                    </button>
+                </div>
+                <div>
+                    <button onclick="decIconSize()" class="selector-option" title="Decrease Icon Size">
+                        <img src="assets/icons/zoom-out.svg" draggable="false"/>
+                    </button>
+                </div>
+            </div>
         </div>
     </content>
     <script src="src/ui/topology.js" type="module"></script>
     <script src="src/ui/canvas-init.js" type="module"></script>
+    <script src="src/ui/configure.js" type="module"></script>
 </body>
 </html>

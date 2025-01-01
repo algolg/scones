@@ -5,7 +5,7 @@ import { EtherType, Frame } from "./frame.js";
 
 
 enum InfStatus {DOWN = 0, UP = 1}
-enum InfLayer { L2 = 2, L3 = 3 }
+export enum InfLayer { L2 = 2, L3 = 3 }
 
 export class IdentifiedList<T extends IdentifiedItem> extends Array<T> {
     public constructor() {
@@ -151,11 +151,6 @@ class InterfaceMatrix {
         return this._list.existsId(mac);
     }
 
-    // private this later
-    private get list(): IdentifiedList<Interface> {
-        return this._list;
-    }
-
     private getRow(mac: MacAddress): number[] {
         return this._matrix[this._list.indexOfId(mac)]
     }
@@ -177,11 +172,19 @@ class InterfaceMatrix {
      * @returns All linked interfaces, if any
      */
     public getLinkedInfs(mac: MacAddress): Interface[] {
-        return this.getRow(mac).filter((x) => x == 2).map((x) => this._list[x]);
+        const row = this.getRow(mac);
+        if (row !== undefined) {
+            return row.filter((x) => x == 2).map((x) => this._list[x]);
+        }
+        return [];
     }
 
     private numLinks(mac: MacAddress): number {
-        return this.getRow(mac).reduce((accumulator, currentValue) => (currentValue == 2 ? accumulator + 1 : accumulator), 0);
+        const row = this.getRow(mac);
+        if (row !== undefined) {
+            return row.reduce((accumulator, currentValue) => (currentValue == 2 ? accumulator + 1 : accumulator), 0);
+        }
+        return -1;
     }
 
     /**
@@ -190,7 +193,11 @@ class InterfaceMatrix {
      * @returns true if the interface is connected to some other interface, false otherwise
      */
     public isConnected(mac: MacAddress): boolean {
-        return this.getRow(mac).some((x) => x == 1);
+        const row = this.getRow(mac);
+        if (row !== undefined) {
+            return row.some((x) => x == 1);
+        }
+        return false;
     }
 
     /**
@@ -305,14 +312,16 @@ export const InfMatrix = new InterfaceMatrix();
 
 abstract class Interface implements IdentifiedItem {
     protected readonly _mac: MacAddress;
+    readonly num: number;
     protected _status: InfStatus = InfStatus.UP;
     protected _vlan: number = null;
     protected readonly _layer: InfLayer;
     protected readonly _network_controller: NetworkController;
 
-    public constructor(network_controller: NetworkController, layer: InfLayer, mac?: MacAddress, tracked: boolean = true) {
+    public constructor(network_controller: NetworkController, layer: InfLayer, num: number, mac?: MacAddress, tracked: boolean = true) {
         this._network_controller = network_controller;
         this._layer = layer;
+        this.num = num;
         if (tracked) {
             let assigned = false;
             while (!assigned) {
@@ -348,6 +357,9 @@ abstract class Interface implements IdentifiedItem {
     }
     public get layer(): InfLayer {
         return this._layer;
+    }
+    public get coords(): [number, number] {
+        return this._network_controller.coords;
     }
 
     public set status(status: InfStatus) {
@@ -395,8 +407,8 @@ abstract class Interface implements IdentifiedItem {
 
 export class L2Interface extends Interface {
 
-    public constructor(network_controller: NetworkController) {
-        super(network_controller, InfLayer.L2);
+    public constructor(network_controller: NetworkController, num: number) {
+        super(network_controller, InfLayer.L2, num);
         this._vlan = 1;
     }
 }
@@ -406,8 +418,8 @@ export class L3Interface extends Interface {
     private _ipv4_prefix: Ipv4Prefix;
     // private _ipv6: Ipv6Address; this won't work yet
 
-    public constructor(network_controller: NetworkController, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0, mac?: MacAddress, tracked: boolean = true) {
-        super(network_controller, InfLayer.L3, mac, tracked);
+    public constructor(network_controller: NetworkController, num: number, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0, mac?: MacAddress, tracked: boolean = true) {
+        super(network_controller, InfLayer.L3, num, mac, tracked);
         this._ipv4 = new Ipv4Address(ipv4_arr);
         this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);
     }
@@ -450,7 +462,7 @@ export class L3Interface extends Interface {
 export class VirtualL3Interface extends L3Interface {
 
     public constructor(network_controller: NetworkController, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0, mac: MacAddress) {
-        super(network_controller, ipv4_arr, ipv4_prefix, mac, false);
+        super(network_controller, -1, ipv4_arr, ipv4_prefix, mac, false);
     }
 
     public async send(frame: Frame): Promise<void> {

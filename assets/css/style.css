@@ -1,10 +1,13 @@
 @import url('layout.css');
+@import url('configure.css');
 
 :root {
     --border-size: min(2px,0.5vmin);
     --transition: 0.1s;
+    --bg-lighter: #e0e6ea;
     --bg-light: #d1cdb7;
     --bg: #afaa91;
+    --bg-dark: #989082;
     --borders: #514e46;
 }
 
@@ -14,6 +17,7 @@ html, body {
     margin: 0;
     padding: 0;
     background-color: var(--bg);
+    font-family: "IBM Plex Sans", sans-serif;
 }
 
 button {
@@ -21,4 +25,8 @@ button {
 }
 button:hover {
     cursor: pointer;
+}
+
+.mono {
+    font-family: 'IBM Plex Mono', monospace;
 }

@@ -9,13 +9,13 @@ content {
     padding: var(--padding);
 }
 
-#topology, #info-panel, #selector-panel {
+#topology, #configure-panel, #selector-panel {
     border: min(3px,0.75vmin) solid var(--borders);
     border-radius: 1px;
     background-color: var(--bg-light);
 }
 
-#info-panel {
+#configure-panel {
     grid-column-start: 2;
     grid-column-end: 3;
     grid-row-start: 1;
@@ -49,6 +49,28 @@ content {
     right: 0;
     margin: auto;
     max-width: 78%;
+}
+.selector-panel-column {
+    aspect-ratio: 0.5;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.selector-panel-column > div {
+    height: calc(100% - 2*min(4px,1vmin));
+}
+.selector-panel-column > div:first-child {
+    padding: min(4px,1vmin);
+}
+.selector-panel-column > div:last-child {
+    padding: 0 min(4px,1vmin) min(4px,1vmin) min(4px,1vmin);
+}
+.selector-panel-column .selector-option {
+    height: 100%;
+    margin: 0;
+}
+.right-align {
+    margin-left: auto;
 }
 
 #topology {

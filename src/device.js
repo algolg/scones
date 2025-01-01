@@ -71,7 +71,13 @@ export class Device {
      */
     static connectDevices(firstDevice, secondDevice) {
         const firstDevice_inf = [...firstDevice._l2infs, ...firstDevice._l3infs].find((x) => !InfMatrix.isConnected(x.mac));
+        if (firstDevice_inf === undefined) {
+            console.log("first device");
+        }
         const secondDevice_inf = [...secondDevice._l2infs, ...secondDevice._l3infs].find((x) => !InfMatrix.isConnected(x.mac));
+        if (secondDevice_inf === undefined) {
+            console.log("second device");
+        }
         if (firstDevice_inf !== undefined && secondDevice_inf !== undefined) {
             InfMatrix.connect(firstDevice_inf.mac, secondDevice_inf.mac);
             return true;
@@ -81,6 +87,10 @@ export class Device {
     static moveDevice(device, new_x_coord, new_y_coord) {
         device.coords = [new_x_coord, new_y_coord];
     }
+    static existsDevice(x_coord, y_coord) {
+        return this.DeviceList.some((dev) => Math.abs(dev.coords[0] - x_coord) <= ICON_SIZE / 2 &&
+            Math.abs(dev.coords[1] - y_coord) <= ICON_SIZE / 2);
+    }
     static getDevice(x_coord, y_coord) {
         return this.DeviceList.find((dev) => Math.abs(dev.coords[0] - x_coord) <= ICON_SIZE / 2 &&
             Math.abs(dev.coords[1] - y_coord) <= ICON_SIZE / 2);
@@ -89,7 +99,7 @@ export class Device {
      * Deletes a device from the topology
      * @param x_coord X-axis coordinate of the device to delete
      * @param y_coord Y-axis coordinate of the device to delete
-     * @returns boolean indicating whether a device with the given ID existed and was deleted
+     * @returns boolean indicating whether a device at the given coordinates existed and was deleted
      */
     static deleteDevice(x_coord, y_coord) {
         const device = this.getDevice(x_coord, y_coord);
@@ -108,6 +118,12 @@ export class Device {
     static get numOfDevices() {
         return this.DeviceList.length;
     }
+    get l2infs() {
+        return this._l2infs;
+    }
+    get l3infs() {
+        return this._l3infs;
+    }
     getId() {
         return this._id;
     }
@@ -121,6 +137,12 @@ export class Device {
         this._forwarding_table.clearValue(mac);
         this._arp_table.clearValue(mac);
     }
+    /**
+     * Determines the IPv4 address to use as the source for an IP error message and sends the error message
+     * @param errored_packet received packet which could not be sent
+     * @param reply_data_func function which uses the received packet to generate a specific ICMP debug message
+     * @returns boolean indicating whether an error response could be sent
+     */
     sendErrorResponse(errored_packet, reply_data_func) {
         let try_local;
         let try_route;
@@ -136,9 +158,10 @@ export class Device {
             src = try_inf.ipv4;
         }
         else {
-            return;
+            return false;
         }
         this.tryEncapsulateAndSend(new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.ICMP, src, errored_packet.src, [], reply_data_func(errored_packet).datagram));
+        return true;
     }
     /**
      * Encapsulates and attempts to send a packet
@@ -155,8 +178,8 @@ export class Device {
             this.sendErrorResponse(packet, IcmpDatagram.timeExceeded);
             return IpResponse.TIME_EXCEEDED;
         }
-        const ipv4_dest = packet.dest;
         // use routing table to look up routes
+        const ipv4_dest = packet.dest;
         const try_route = this._routing_table.get(ipv4_dest);
         // check if a route exists
         if (try_route !== undefined && try_route.length > 0) {
@@ -190,6 +213,14 @@ export class Device {
         // destination network unreachable
         this.sendErrorResponse(packet, IcmpDatagram.netUnreachable);
         return IpResponse.NET_UNREACHABLE;
+    }
+    tryForward(packet) {
+        // this way, the received packet is returned in the ICMP error message if time exceeded
+        if (packet.ttl <= 1) {
+            this.sendErrorResponse(packet, IcmpDatagram.timeExceeded);
+            return IpResponse.TIME_EXCEEDED;
+        }
+        return this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(packet));
     }
     hasL2Infs() {
         return this._l2infs.length > 0;
@@ -366,9 +397,8 @@ export class Device {
             }
         }
         else {
-            if (this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(ipv4_packet)) == IpResponse.SENT) {
-                return true;
-            }
+            this.tryForward(ipv4_packet);
+            return true;
         }
         return false;
     }
@@ -382,12 +412,6 @@ export class Device {
                 break;
             }
         }
-        // if this device is not the destination, try to forward the request
-        // return ICMP errors if any arise
-        if (!this.hasInfWithIpv4(ipv4_packet.dest)) {
-            this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(ipv4_packet));
-        }
-        // otherwise, process the packet thoroughly
         switch (icmp_datagram.type) {
             // if the datagram is an Echo Request, send a reply
             case IcmpControlMessage.ECHO_REQUEST:
@@ -498,7 +522,7 @@ export class PersonalComputer extends Device {
     constructor() {
         super(DeviceType.PC);
         this._loopback = VirtualL3Interface.newLoopback(this._network_controller);
-        this._l3infs.push(new L3Interface(this._network_controller));
+        this._l3infs.push(new L3Interface(this._network_controller, 0));
         this._arp_table.setLocalInfs(...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
     }
@@ -524,12 +548,9 @@ export class Switch extends Device {
         super(DeviceType.SWITCH);
         this._loopback = undefined;
         for (let i = 0; i < num_inf; i++) {
-            this._l2infs.push(new L2Interface(this._network_controller));
+            this._l2infs.push(new L2Interface(this._network_controller, i));
         }
         InfMatrix.link(...this._l2infs.map((x) => x.mac));
-    }
-    get l2infs() {
-        return this._l2infs;
     }
 }
 export class Router extends Device {
@@ -537,14 +558,11 @@ export class Router extends Device {
         super(DeviceType.ROUTER);
         this._loopback = VirtualL3Interface.newLoopback(this._network_controller);
         for (let i = 0; i < num_inf; i++) {
-            this._l3infs.push(new L3Interface(this._network_controller));
+            this._l3infs.push(new L3Interface(this._network_controller, i));
         }
         InfMatrix.link(...this._l3infs.map((x) => x.mac));
         this._arp_table.setLocalInfs(...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
-    }
-    get l3infs() {
-        return this._l3infs;
     }
 }
 async function test_icmp() {
@@ -575,8 +593,7 @@ async function test_icmp() {
     InfMatrix.connect(sw1.l2infs[1].mac, ro1.l3infs[0].mac);
     InfMatrix.connect(ro1.l3infs[1].mac, sw2.l2infs[1].mac);
     InfMatrix.connect(sw2.l2infs[0].mac, pc2.inf.mac);
-    // pc1.ping(pc2.ipv4, 4);
-    pc1.ping(new Ipv4Address([8, 8, 8, 8]), 4);
+    pc1.ping(pc2.ipv4, 4);
 }
-test_icmp();
+// test_icmp();
 //# sourceMappingURL=device.js.map

@@ -1,0 +1,52 @@
+.config-option {
+    border-radius: 3px;
+    background-color: var(--bg);
+    margin: calc(var(--border-size) * 2);
+    padding: 8px;
+}
+.option-dropdown {
+    display: none;
+}
+.option-dropdown-label {
+    width: 90%;
+    display: flex;
+    justify-content: space-between;
+}
+.option-dropdown-label:hover {
+    cursor: pointer;
+}
+.option-dropdown-label > div {
+    display: inline-block;
+}
+.option-dropdown-contents {
+    border-radius: 3px;
+    background-color: var(--bg-dark);
+    visibility: hidden;
+    padding: 0;
+    margin: 0;
+    max-height: 0;
+    transition: max-height 0.2s, padding 0.2s, margin 0.2s;
+}
+.option-dropdown:checked ~ .option-dropdown-contents {
+    visibility: visible;
+    padding: 8px;
+    margin: 8px;
+    max-height: 500px;
+}
+
+.option-form {
+    display: block;
+}
+.option-form > input {
+    display: block;
+    padding: 4px;
+    border: none;
+    border-radius: 2px;
+    background-color: var(--bg-lighter);
+}
+.option-form > input[type=text] {
+    width: 15em;
+}
+.option-form > input[type=number] {
+    width: 5em;
+}

@@ -1,6 +1,9 @@
 import { Device, PersonalComputer, Router, Switch } from "../device.js";
-import { canvas, ctx, initCanvas, pc_img, resetCanvas, router_img, server_img, setDPI, switch_img } from "./canvas-init.js";
-import { ICON_SIZE } from "./variables.js";
+import { InfMatrix } from "../interface.js";
+import { CableList } from "./cable.js";
+import { canvas, ctx, initCanvas, pc_img, redrawCanvas, router_img, server_img, setDPI, switch_img } from "./canvas-init.js";
+import { displayInfo } from "./configure.js";
+import { ICON_SIZE, decreaseIconSize, increaseIconSize } from "./variables.js";
 
 let current_click_func: (x: number, y: number) => void = selectDevice;
 setDPI(canvas, 192);
@@ -10,7 +13,7 @@ const height = canvas.height;
 const width = canvas.width;
 
 let draggable = false;
-let focusedDevice: Device;
+export let focusedDevice: Device = undefined;
 
 canvas.onmousedown = (e) => {
     if (0 <= e.offsetX && e.offsetX <= width && 0 <= e.offsetY && e.offsetY <= height) {
@@ -20,60 +23,94 @@ canvas.onmousedown = (e) => {
 canvas.onmousemove = (e) => {
     if (draggable && focusedDevice) {
         Device.moveDevice(focusedDevice, e.offsetX, e.offsetY);
-        resetCanvas();
+        redrawCanvas(false);
+    }
+    else if (current_click_func === selectDevice) {
+        if (Device.existsDevice(e.offsetX, e.offsetY)) {
+            document.body.style.cursor = 'pointer';
+        }
+        else {
+            document.body.style.cursor = 'default';
+        }
     }
 };
 canvas.onmouseup = (e) => {
     draggable = false;
     if (focusedDevice !== undefined) {
-        console.log(focusedDevice.coords);
     }
+    console.log(e.offsetX, e.offsetY);
 };
 canvas.onmouseout = (e) => {
     draggable = false;
 };
 
-function resetMode() {
-    current_click_func = selectDevice;
-    document.body.style.cursor = 'default';
-}
-
 function selectDevice(x: number, y: number) {
     const device = Device.getDevice(x, y);
     if (device !== undefined) {
-        console.log("selected!");
         draggable = true;
         focusedDevice = device;
+        redrawCanvas();
+        displayInfo(device);
     }
 }
 
-function deleteDevice(x: number, y: number) {
+function deleteElement(x: number, y: number) {
     document.body.style.cursor = 'crosshair'
-    if(Device.deleteDevice(x, y)) {
-        console.log("deleted")
-        resetCanvas();
+    if (Device.deleteDevice(x, y)) {
+        focusedDevice = undefined;
         resetMode();
     }
-    focusedDevice = undefined;
+    else {
+        for (let cable of CableList) {
+            if (cable.isOn(x, y)) {
+                InfMatrix.disconnect(cable.start_inf, cable.end_inf);
+                resetMode();
+                break;
+            }
+        }
+    }
+    redrawCanvas();
 }
 
 function connectDevices(x: number, y: number) {
     if (focusedDevice === undefined) {
         focusedDevice = Device.getDevice(x, y);
+        redrawCanvas();
+        console.log("got first device")
     }
     else {
-        Device.connectDevices(focusedDevice, Device.getDevice(x, y));
-        resetCanvas();
+        let firstDevice = focusedDevice;
+        let secondDevice = Device.getDevice(x, y);
+        if (secondDevice !== undefined && secondDevice !== firstDevice) {
+            console.log("got second device")
+            if (Device.connectDevices(firstDevice, secondDevice)) {
+                console.log("connected!")
+            }
+            resetMode();
+            redrawCanvas();
+        }
     }
 }
 
-function connect() {
+function resetMode() {
+    current_click_func = selectDevice;
+    document.body.style.cursor = 'default';
+    redrawCanvas();
+} (<any>window).resetMode = resetMode;
+
+function connectMode() {
     focusedDevice = undefined;    
     document.body.style.cursor = 'crosshair'
     current_click_func = connectDevices;
-}
+} (<any>window).connectMode = connectMode;
 
-function create(name: string) {
+function deleteMode() {
+    focusedDevice = undefined;
+    document.body.style.cursor = 'crosshair';
+    current_click_func = deleteElement;
+} (<any>window).deleteMode = deleteMode;
+
+function createMode(name: string) {
     document.body.style.cursor = 'crosshair'
     switch (name.toUpperCase()) {
         case ("PC"):
@@ -100,7 +137,7 @@ function create(name: string) {
             break;
         case ("SWITCH"):
             current_click_func = (x: number, y: number) => {
-                Device.createDevice(new Switch(2), x, y);
+                Device.createDevice(new Switch(5), x, y);
                 ctx.drawImage(switch_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
                 resetMode();
             }
@@ -110,4 +147,14 @@ function create(name: string) {
             return;
     }
 
-}(<any>window).create = create;
+} (<any>window).createMode = createMode;
+
+function incIconSize() {
+    increaseIconSize();
+    redrawCanvas();
+} (<any>window).incIconSize = incIconSize;
+
+function decIconSize() {
+    decreaseIconSize();
+    redrawCanvas();
+} (<any>window).decIconSize = decIconSize;

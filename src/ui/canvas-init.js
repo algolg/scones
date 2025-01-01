@@ -1,4 +1,8 @@
 import { Device, DeviceType } from "../device.js";
+import { InfMatrix } from "../interface.js";
+import { Cable, CableList } from "./cable.js";
+import { displayInfo, resetConfigurePanel } from "./configure.js";
+import { focusedDevice } from "./topology.js";
 import { ICON_SIZE } from "./variables.js";
 export const canvas = document.getElementById('canvas');
 export const topology = document.getElementById('topology');
@@ -45,16 +49,19 @@ export function initCanvas() {
     const height = canvas.height;
     const width = canvas.width;
     ctx.clearRect(0, 0, width, height);
-    // for (let x = -4; x <= width + 20; x += 20) {
-    //     ctx.moveTo(x, 0);
-    //     ctx.lineTo(x, height);
-    // }
-    // for (let y = -4; y <= height + 20; y += 20) {
-    //     ctx.moveTo(0, y);
-    //     ctx.lineTo(width, y);
-    // }
-    // ctx.strokeStyle = '#afaa9155';
-    // ctx.stroke();
+    CableList.splice(0, CableList.length);
+    ctx.beginPath();
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    for (let connection of InfMatrix.adjacency_list) {
+        const new_cable = new Cable(connection[0].coords, connection[1].coords, connection[0].mac, connection[1].mac, connection[0].num, connection[1].num);
+        CableList.push(new_cable);
+        ctx.moveTo(new_cable.start_x, new_cable.start_y);
+        ctx.lineTo(new_cable.end_x, new_cable.end_y);
+        new_cable.drawLabels();
+    }
+    ctx.closePath();
+    ctx.stroke();
     for (let device of Device.getIterator()) {
         const x = device.coords[0];
         const y = device.coords[1];
@@ -76,7 +83,20 @@ export function initCanvas() {
         ctx.drawImage(img, x - ICON_SIZE / 2, y - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE);
     }
 }
-export function resetCanvas() {
+export function redrawCanvas(display = true) {
     initCanvas();
+    if (focusedDevice !== undefined) {
+        if (display) {
+            displayInfo(focusedDevice);
+        }
+        ctx.beginPath();
+        ctx.strokeStyle = '#44668866';
+        ctx.rect(focusedDevice.coords[0] - ICON_SIZE / 2 - 5, focusedDevice.coords[1] - ICON_SIZE / 2 - 5, ICON_SIZE + 10, ICON_SIZE + 10);
+        ctx.closePath();
+        ctx.stroke();
+    }
+    else {
+        resetConfigurePanel();
+    }
 }
 //# sourceMappingURL=canvas-init.js.map
