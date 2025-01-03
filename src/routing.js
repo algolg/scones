@@ -69,6 +69,31 @@ export class RoutingTable {
         }
         return undefined;
     }
+    delete(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance) {
+        const key = `${dest_ipv4.and(dest_prefix)}/${dest_prefix.value}`;
+        const find_route = [remote_gateway, local_inf];
+        if (this._table.has(key)) {
+            const ADs = this._table.get(key);
+            if (ADs.has(administrative_distance)) {
+                let routes = ADs.get(administrative_distance);
+                const route_idx = routes.findIndex((val) => val[0].compare(find_route[0]) == 0 &&
+                    val[1].compare(find_route[1]) == 0);
+                if (route_idx != -1) {
+                    // Delete the route
+                    routes.splice(route_idx, 1);
+                    // Delete unneeded route info
+                    if (routes.length == 0) {
+                        ADs.delete(administrative_distance);
+                        if (ADs.size == 0) {
+                            this._table.delete(key);
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     /**
      * Gets all non-local routes on the device
      * @returns An array of [Destination Network, Next-Hop IPv4, Exit Interface IPv4, Administrative Distance] tuples defining every route

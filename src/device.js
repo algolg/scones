@@ -141,6 +141,9 @@ export class Device {
     setRoute(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance) {
         return this._routing_table.set(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance);
     }
+    deleteRoute(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance) {
+        return this._routing_table.delete(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance);
+    }
     /**
      * Determines the IPv4 address to use as the source for an IP error message and sends the error message
      * @param errored_packet received packet which could not be sent

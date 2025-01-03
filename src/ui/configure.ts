@@ -34,20 +34,21 @@ const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_ac
 
 const routeConfig = (routes: [string, Ipv4Address, Ipv4Address, number][]) => {
     let table_rows = "";
-    routes.forEach((route) =>
+    routes.forEach((route) => {
+        let num = focusedDevice.l3infs.find((inf) => inf.ipv4.compare(route[2]) == 0).num;
         table_rows += `
         <tr>
             <td>${route[0]}</td>
             <td>${route[1]}</td>
-            <td>eth${focusedDevice.l3infs.find((inf) => inf.ipv4.compare(route[2]) == 0).num}</td>
+            <td>eth${num}</td>
             <td>${route[3]}</td>
             <td>
-                <button onclick="deleteRule(this)" dest="${route[0]}" nexthop="${route[1]}" exitinf="${route[2]}" ad="${route[3]}">
+                <button onclick="deleteRoute(this)" dest="${route[0]}" nexthop="${route[1]}" exitinf="${num}" ad="${route[3]}">
                     <img src="assets/icons/delete.svg"/>
                 </button>
             </td>
         </tr>`
-    );
+    });
     let options = "";
     for (let i = 0; i < focusedDevice.l3infs.length; i++) {
         options += `<option value="${i}">eth${i}</option>`
@@ -192,3 +193,44 @@ function addRoute() {
     focusedDevice.setRoute(dest_ipv4_address, new Ipv4Prefix(dest_ipv4_prefix), next_hop_ipv4_address, local_inf, administrative_distance)
     displayInfo(focusedDevice);
 } (<any>window).addRoute = addRoute;
+
+function deleteRoute(ele: HTMLButtonElement) {
+    const dest = ele.getAttribute('dest');
+    const nexthop = ele.getAttribute('nexthop');
+    const exitinf = ele.getAttribute('exitinf');
+    const ad = ele.getAttribute('ad');
+
+    if (dest === undefined || nexthop === undefined || exitinf === undefined || ad === undefined) {
+        console.log("Could not delete route");
+        return;
+    }
+
+    const dest_split = dest.split('/');
+
+    if (dest_split.length != 2) {
+        console.log("Could not delete route");
+        return;
+    }
+
+    const dest_ipv4_address = Ipv4Address.parseString(dest_split[0]);
+    const dest_ipv4_prefix = parseInt(dest_split[1]);
+    const next_hop_ipv4_address = Ipv4Address.parseString(nexthop);
+    const exit_interface_num = parseInt(exitinf)
+    const administrative_distance = parseInt(ad);
+
+    if (dest_ipv4_address === undefined || isNaN(dest_ipv4_prefix) || next_hop_ipv4_address === undefined || isNaN(exit_interface_num) || isNaN(administrative_distance)) {
+        console.log("Could not delete route");
+        return;
+    }
+    if (exit_interface_num < 0 || exit_interface_num >= focusedDevice.l3infs.length) {
+        console.log("Could not delete route");
+        return;
+    }
+
+    const local_inf = focusedDevice.l3infs[exit_interface_num].ipv4;
+
+    console.log(`${dest_ipv4_address}/${dest_ipv4_prefix}, ${next_hop_ipv4_address}, ${local_inf}, ${administrative_distance}`);
+    
+    focusedDevice.deleteRoute(dest_ipv4_address, new Ipv4Prefix(dest_ipv4_prefix), next_hop_ipv4_address, local_inf, administrative_distance);
+    displayInfo(focusedDevice)
+} (<any>window).deleteRoute = deleteRoute;

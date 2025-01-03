@@ -156,9 +156,11 @@ export abstract class Device implements IdentifiedItem {
     }
 
     public getAllRoutes = () => this._routing_table.getAllRoutes();
-
     public setRoute(dest_ipv4: Ipv4Address, dest_prefix: Ipv4Prefix, remote_gateway: Ipv4Address, local_inf: Ipv4Address, administrative_distance: number): boolean {
         return this._routing_table.set(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance);
+    }
+    public deleteRoute(dest_ipv4: Ipv4Address, dest_prefix: Ipv4Prefix, remote_gateway: Ipv4Address, local_inf: Ipv4Address, administrative_distance: number): boolean {
+        return this._routing_table.delete(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance);
     }
 
     /**
