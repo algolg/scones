@@ -1,3 +1,7 @@
+#configure-panel h2 {
+    margin: 0.25em 0.3em;
+}
+
 .config-option {
     border-radius: 3px;
     background-color: var(--bg);
@@ -22,13 +26,15 @@
     border-radius: 3px;
     background-color: var(--bg-dark);
     visibility: hidden;
-    padding: 0;
-    margin: 0;
+    opacity: 0;
+    padding: 0 8px;
+    margin: 0 8px;
     max-height: 0;
-    transition: max-height 0.2s, padding 0.2s, margin 0.2s;
+    transition: max-height 0.2s, padding 0.2s, margin 0.2s, visibility 0.2s, opacity 0.2s;
 }
 .option-dropdown:checked ~ .option-dropdown-contents {
     visibility: visible;
+    opacity: 1;
     padding: 8px;
     margin: 8px;
     max-height: 500px;
@@ -37,9 +43,10 @@
 .option-form {
     display: block;
 }
-.option-form > input {
+.option-form > input, select, button[type=submit] {
     display: block;
     padding: 4px;
+    max-width: 100%;
     border: none;
     border-radius: 2px;
     background-color: var(--bg-lighter);
@@ -49,4 +56,35 @@
 }
 .option-form > input[type=number] {
     width: 5em;
+}
+.option-form > button[type=submit] {
+    margin-top: 8px;
+}
+
+.config-table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    border-spacing: 0;
+}
+.config-option th, td {
+    border: none;
+}
+.config-table th {
+    text-align: left;
+    text-wrap: wrap;
+    word-wrap: break-word;
+    max-width: min-content;
+    border-bottom: 2px solid;
+}
+.config-table td {
+    text-align: left;
+    text-wrap: wrap;
+    word-wrap: break-word;
+}
+.config-table img {
+    max-width: 100%;
+}
+.config-table button {
+    border: none;
 }

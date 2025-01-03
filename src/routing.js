@@ -1,7 +1,7 @@
 import { Ipv4Prefix } from "./addressing.js";
 export class RoutingTable {
     constructor() {
-        this._local_infs = []; // or do this through the network controller
+        this._local_infs = [];
         this._table = new Map();
     }
     // network address --> AD --> [remote_gateway, local_inf]
@@ -19,7 +19,7 @@ export class RoutingTable {
      * @returns
      */
     set(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance) {
-        const key = dest_ipv4.and(dest_prefix).toString();
+        const key = `${dest_ipv4.and(dest_prefix)}/${dest_prefix.value}`;
         const new_route = [remote_gateway, local_inf];
         administrative_distance = Math.max(1, administrative_distance); // only directly connected routes will have AD of 0
         // if the destination already has route(s), add the route only if it is new
@@ -59,7 +59,7 @@ export class RoutingTable {
             }
         }
         for (let i = 32; i >= 0; i--) {
-            const try_search = this._table.get(dest_ipv4.and(new Ipv4Prefix(i)).toString());
+            const try_search = this._table.get(`${dest_ipv4.and(new Ipv4Prefix(i))}/${i}`);
             if (try_search !== undefined) {
                 const routes = try_search.get(Math.min(...try_search.keys()));
                 // put the top route at the bottom of the array (for load balancing)
@@ -68,6 +68,21 @@ export class RoutingTable {
             }
         }
         return undefined;
+    }
+    /**
+     * Gets all non-local routes on the device
+     * @returns An array of [Destination Network, Next-Hop IPv4, Exit Interface IPv4, Administrative Distance] tuples defining every route
+     */
+    getAllRoutes() {
+        let output = [];
+        for (let dest of this._table.entries()) {
+            for (let AD of dest[1]) {
+                for (let route_info of AD[1]) {
+                    output.push([dest[0], route_info[0], route_info[1], AD[0]]);
+                }
+            }
+        }
+        return output;
     }
 }
 //# sourceMappingURL=routing.js.map

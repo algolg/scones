@@ -50,7 +50,6 @@ function selectDevice(x: number, y: number) {
         draggable = true;
         focusedDevice = device;
         redrawCanvas();
-        displayInfo(device);
     }
 }
 

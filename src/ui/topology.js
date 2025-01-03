@@ -2,7 +2,6 @@ import { Device, PersonalComputer, Router, Switch } from "../device.js";
 import { InfMatrix } from "../interface.js";
 import { CableList } from "./cable.js";
 import { canvas, ctx, initCanvas, pc_img, redrawCanvas, router_img, server_img, setDPI, switch_img } from "./canvas-init.js";
-import { displayInfo } from "./configure.js";
 import { ICON_SIZE, decreaseIconSize, increaseIconSize } from "./variables.js";
 let current_click_func = selectDevice;
 setDPI(canvas, 192);
@@ -45,7 +44,6 @@ function selectDevice(x, y) {
         draggable = true;
         focusedDevice = device;
         redrawCanvas();
-        displayInfo(device);
     }
 }
 function deleteElement(x, y) {

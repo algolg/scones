@@ -217,6 +217,7 @@ export class Ipv4Address {
     }
     set value(arr) {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
+        console.log(`address set to ${this}`);
     }
     get value() {
         return this._value;
@@ -252,6 +253,26 @@ export class Ipv4Address {
         }
         return 0;
     }
+    /**
+     * Parses a string to create an Ipv4Address object
+     * @param str the string to parse
+     * @returns an Ipv4Address object of the string, if the string is valid, or undefined otherwise
+     */
+    static parseString(str) {
+        let arr = str.split('.');
+        if (arr.length != 4) {
+            return undefined;
+        }
+        let num_arr = [0, 0, 0, 0];
+        for (let i = 0; i < 4; i++) {
+            const parsed = parseInt(arr[i]);
+            if (isNaN(parsed) || parsed < 0 || parsed > 255) {
+                return undefined;
+            }
+            num_arr[i] = parsed;
+        }
+        return new Ipv4Address(num_arr);
+    }
 }
 export class Ipv4Prefix {
     constructor(ipv4_prefix) {
@@ -259,6 +280,7 @@ export class Ipv4Prefix {
     }
     set value(ipv4_prefix) {
         this._ipv4_prefix = ipv4_prefix & 0x3F;
+        console.log(`prefix set to ${this._ipv4_prefix}`);
     }
     get value() {
         return this._ipv4_prefix;

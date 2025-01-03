@@ -34,6 +34,7 @@ export class Device {
         this._sockets = new SocketTable();
         this._l3infs = [];
         this._l2infs = [];
+        this.getAllRoutes = () => this._routing_table.getAllRoutes();
         this.device_type = device_type;
         let assigned = false;
         while (!assigned) {
@@ -136,6 +137,9 @@ export class Device {
         }
         this._forwarding_table.clearValue(mac);
         this._arp_table.clearValue(mac);
+    }
+    setRoute(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance) {
+        return this._routing_table.set(dest_ipv4, dest_prefix, remote_gateway, local_inf, administrative_distance);
     }
     /**
      * Determines the IPv4 address to use as the source for an IP error message and sends the error message

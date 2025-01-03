@@ -271,6 +271,7 @@ export class Ipv4Address implements GeneralIpAddress {
 
     public set value(arr: [number, number, number, number]) {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
+        console.log(`address set to ${this}`);
     }
 
     public get value(): Uint8Array {
@@ -315,6 +316,27 @@ export class Ipv4Address implements GeneralIpAddress {
         return 0;
     }
 
+    /**
+     * Parses a string to create an Ipv4Address object
+     * @param str the string to parse
+     * @returns an Ipv4Address object of the string, if the string is valid, or undefined otherwise
+     */
+    public static parseString(str: string): Ipv4Address {
+        let arr = str.split('.');
+        if (arr.length != 4) {
+            return undefined;
+        }
+        let num_arr: [number, number, number, number] = [0,0,0,0];
+        for (let i = 0; i < 4; i++) {
+            const parsed = parseInt(arr[i]);
+            if (isNaN(parsed) || parsed < 0 || parsed > 255) {
+                return undefined;
+            }
+            num_arr[i] = parsed;
+        }
+        return new Ipv4Address(num_arr);
+    }
+
 }
 
 export class Ipv4Prefix {
@@ -326,6 +348,7 @@ export class Ipv4Prefix {
 
     public set value(ipv4_prefix: number) {
         this._ipv4_prefix = ipv4_prefix & 0x3F;
+        console.log(`prefix set to ${this._ipv4_prefix}`);
     }
 
     public get value(): number {

@@ -32,10 +32,10 @@ export class Cable {
                 Math.abs(Math.abs(this.invSlope(x, y) / (this.invSlope())) - 1) <= 0.1)) ||
             (Math.abs(this.slope()) <= 0.1 &&
                 (x - this.start_x > 0) != (x - this.end_x > 0) &&
-                Math.abs(y - this.end_y) <= 2) ||
+                Math.abs(y - (this.start_y + this.end_y) / 2) <= 2) ||
             (Math.abs(this.invSlope()) <= 0.1 &&
                 (y - this.start_y > 0) != (y - this.end_y > 0) &&
-                Math.abs(x - this.end_x) <= 2));
+                Math.abs(x - (this.start_x + this.end_x) / 2) <= 2));
     }
     drawLabels() {
         const angle = Math.atan2(this.end_y - this.start_y, this.end_x - this.start_x);

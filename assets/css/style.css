@@ -20,6 +20,11 @@ html, body {
     font-family: "IBM Plex Sans", sans-serif;
 }
 
+::selection {
+    background-color: #27231d;
+    color: var(--bg-lighter);
+}
+
 button {
     background-color: var(--bg);
 }
