@@ -1,5 +1,9 @@
+const canvas = <HTMLCanvasElement>document.getElementById('canvas');
+
 export let ICON_SIZE: number = 80;
 export let ICON_RADIUS = () => ICON_SIZE / Math.SQRT2;
+export let CANVAS_WIDTH = () => canvas.width;
+export let CANVAS_HEIGHT = () => canvas.height;
 
 export function increaseIconSize() {
     ICON_SIZE = Math.min(160, ICON_SIZE+10);

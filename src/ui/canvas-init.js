@@ -25,8 +25,8 @@ pc_img.width = pc_img.height =
 // https://stackoverflow.com/questions/14488849/higher-dpi-graphics-with-html5-canvas
 export function setDPI(canvas, dpi) {
     // Set up CSS size.
-    canvas.style.width = canvas.style.width || canvas.width + 'px';
-    canvas.style.height = canvas.style.height || canvas.height + 'px';
+    canvas.style.width = canvas.width + 'px';
+    canvas.style.height = canvas.height + 'px';
     // Get size information.
     var scaleFactor = dpi / 96;
     var width = parseFloat(canvas.style.width);
@@ -54,7 +54,9 @@ export function initCanvas() {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     for (let connection of InfMatrix.adjacency_list) {
-        const new_cable = new Cable(connection[0].coords, connection[1].coords, connection[0].mac, connection[1].mac, connection[0].num, connection[1].num);
+        const scaled_coords_1 = [connection[0].coords[0] * canvas.width, connection[0].coords[1] * canvas.height];
+        const scaled_coords_2 = [connection[1].coords[0] * canvas.width, connection[1].coords[1] * canvas.height];
+        const new_cable = new Cable(scaled_coords_1, scaled_coords_2, connection[0].mac, connection[1].mac, connection[0].num, connection[1].num);
         CableList.push(new_cable);
         ctx.moveTo(new_cable.start_x, new_cable.start_y);
         ctx.lineTo(new_cable.end_x, new_cable.end_y);
@@ -63,8 +65,8 @@ export function initCanvas() {
     ctx.closePath();
     ctx.stroke();
     for (let device of Device.getIterator()) {
-        const x = device.coords[0];
-        const y = device.coords[1];
+        const x = device.coords[0] * canvas.width;
+        const y = device.coords[1] * canvas.height;
         let img;
         switch (device.device_type) {
             case DeviceType.PC:
@@ -91,7 +93,7 @@ export function redrawCanvas(display = true) {
         }
         ctx.beginPath();
         ctx.strokeStyle = '#44668866';
-        ctx.rect(focusedDevice.coords[0] - ICON_SIZE / 2 - 5, focusedDevice.coords[1] - ICON_SIZE / 2 - 5, ICON_SIZE + 10, ICON_SIZE + 10);
+        ctx.rect(focusedDevice.coords[0] * canvas.width - ICON_SIZE / 2 - 5, focusedDevice.coords[1] * canvas.height - ICON_SIZE / 2 - 5, ICON_SIZE + 10, ICON_SIZE + 10);
         ctx.closePath();
         ctx.stroke();
     }
@@ -99,4 +101,10 @@ export function redrawCanvas(display = true) {
         resetConfigurePanel();
     }
 }
+window.onresize = () => {
+    canvas.width = topology.clientWidth;
+    canvas.height = topology.clientHeight;
+    setDPI(canvas, 192);
+    redrawCanvas();
+};
 //# sourceMappingURL=canvas-init.js.map

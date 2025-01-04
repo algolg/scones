@@ -7,7 +7,7 @@ import { IdentifiedList, InfMatrix, L2Interface, L3Interface, VirtualL3Interface
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 import { RoutingTable } from "./routing.js";
 import { Socket, SocketTable } from "./socket.js";
-import { ICON_SIZE } from "./ui/variables.js";
+import { CANVAS_HEIGHT, CANVAS_WIDTH, ICON_SIZE } from "./ui/variables.js";
 var IpResponse;
 (function (IpResponse) {
     IpResponse[IpResponse["SENT"] = 0] = "SENT";
@@ -59,7 +59,7 @@ export class Device {
      * @returns Device's ID as a number
      */
     static createDevice(device, x_coord, y_coord) {
-        device.coords = [x_coord, y_coord];
+        device.coords = [x_coord / CANVAS_WIDTH(), y_coord / CANVAS_HEIGHT()];
         console.log(`${device.coords}`);
         return device;
     }
@@ -86,15 +86,15 @@ export class Device {
         return false;
     }
     static moveDevice(device, new_x_coord, new_y_coord) {
-        device.coords = [new_x_coord, new_y_coord];
+        device.coords = [new_x_coord / CANVAS_WIDTH(), new_y_coord / CANVAS_HEIGHT()];
     }
     static existsDevice(x_coord, y_coord) {
-        return this.DeviceList.some((dev) => Math.abs(dev.coords[0] - x_coord) <= ICON_SIZE / 2 &&
-            Math.abs(dev.coords[1] - y_coord) <= ICON_SIZE / 2);
+        return this.DeviceList.some((dev) => Math.abs(dev.coords[0] * CANVAS_WIDTH() - x_coord) <= ICON_SIZE / 2 &&
+            Math.abs(dev.coords[1] * CANVAS_HEIGHT() - y_coord) <= ICON_SIZE / 2);
     }
     static getDevice(x_coord, y_coord) {
-        return this.DeviceList.find((dev) => Math.abs(dev.coords[0] - x_coord) <= ICON_SIZE / 2 &&
-            Math.abs(dev.coords[1] - y_coord) <= ICON_SIZE / 2);
+        return this.DeviceList.find((dev) => Math.abs(dev.coords[0] * CANVAS_WIDTH() - x_coord) <= ICON_SIZE / 2 &&
+            Math.abs(dev.coords[1] * CANVAS_HEIGHT() - y_coord) <= ICON_SIZE / 2);
     }
     /**
      * Deletes a device from the topology

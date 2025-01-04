@@ -1,7 +1,7 @@
 import { Device, DeviceType } from "../device.js";
 import { InfMatrix } from "../interface.js";
 import { Cable, CableList } from "./cable.js";
-import { configurePanel, displayInfo, resetConfigurePanel } from "./configure.js";
+import { displayInfo, resetConfigurePanel } from "./configure.js";
 import { focusedDevice } from "./topology.js";
 import { ICON_SIZE } from "./variables.js";
 
@@ -29,8 +29,8 @@ switch_img.width = switch_img.height = ICON_SIZE;
 // https://stackoverflow.com/questions/14488849/higher-dpi-graphics-with-html5-canvas
 export function setDPI(canvas, dpi) {
     // Set up CSS size.
-    canvas.style.width = canvas.style.width || canvas.width + 'px';
-    canvas.style.height = canvas.style.height || canvas.height + 'px';
+    canvas.style.width = canvas.width + 'px';
+    canvas.style.height = canvas.height + 'px';
 
     // Get size information.
     var scaleFactor = dpi / 96;
@@ -65,7 +65,9 @@ export function initCanvas() {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     for (let connection of InfMatrix.adjacency_list) {
-        const new_cable = new Cable(connection[0].coords, connection[1].coords, connection[0].mac, connection[1].mac, connection[0].num, connection[1].num);
+        const scaled_coords_1: [number,number] = [connection[0].coords[0] * canvas.width, connection[0].coords[1] * canvas.height];
+        const scaled_coords_2: [number,number] = [connection[1].coords[0] * canvas.width, connection[1].coords[1] * canvas.height];
+        const new_cable = new Cable(scaled_coords_1, scaled_coords_2, connection[0].mac, connection[1].mac, connection[0].num, connection[1].num);
         CableList.push(new_cable);
         ctx.moveTo(new_cable.start_x, new_cable.start_y);
         ctx.lineTo(new_cable.end_x, new_cable.end_y);
@@ -75,8 +77,8 @@ export function initCanvas() {
     ctx.stroke();
 
     for (let device of Device.getIterator()) {
-        const x = device.coords[0];
-        const y = device.coords[1];
+        const x = device.coords[0] * canvas.width;
+        const y = device.coords[1] * canvas.height;
         let img;
         switch (device.device_type) {
             case DeviceType.PC:
@@ -106,8 +108,8 @@ export function redrawCanvas(display: boolean = true) {
         ctx.beginPath();
         ctx.strokeStyle = '#44668866'
         ctx.rect(
-            focusedDevice.coords[0] - ICON_SIZE/2 - 5,
-            focusedDevice.coords[1] - ICON_SIZE/2 - 5,
+            focusedDevice.coords[0] * canvas.width - ICON_SIZE/2 - 5,
+            focusedDevice.coords[1] * canvas.height - ICON_SIZE/2 - 5,
             ICON_SIZE + 10,
             ICON_SIZE + 10,
         )
@@ -117,4 +119,12 @@ export function redrawCanvas(display: boolean = true) {
     else {
         resetConfigurePanel();
     }
+}
+
+window.onresize = () => {
+    canvas.width = topology.clientWidth;
+    canvas.height = topology.clientHeight;
+
+    setDPI(canvas, 192);
+    redrawCanvas();
 }
