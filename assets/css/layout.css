@@ -78,7 +78,7 @@ content {
 }
 
 #topology {
-    background: repeat url('/assets/images/grid.png');
+    background: repeat url('../images/grid.png');
     image-rendering: pixelated;
     overflow: scroll;
     -ms-overflow-style: none;
