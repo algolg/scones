@@ -6,12 +6,13 @@ import { ICON_SIZE, decreaseIconSize, increaseIconSize } from "./variables.js";
 let current_click_func = selectDevice;
 setDPI(canvas, 192);
 initCanvas();
-const height = canvas.height;
-const width = canvas.width;
 let draggable = false;
 export let focusedDevice = undefined;
+export function clearFocus() {
+    focusedDevice = undefined;
+}
 canvas.onmousedown = (e) => {
-    if (0 <= e.offsetX && e.offsetX <= width && 0 <= e.offsetY && e.offsetY <= height) {
+    if (0 <= e.offsetX && e.offsetX <= canvas.width && 0 <= e.offsetY && e.offsetY <= canvas.height) {
         current_click_func(e.offsetX, e.offsetY);
     }
 };
@@ -33,7 +34,6 @@ canvas.onmouseup = (e) => {
     draggable = false;
     if (focusedDevice !== undefined) {
     }
-    console.log(e.offsetX, e.offsetY);
 };
 canvas.onmouseout = (e) => {
     draggable = false;
@@ -43,13 +43,15 @@ function selectDevice(x, y) {
     if (device !== undefined) {
         draggable = true;
         focusedDevice = device;
-        redrawCanvas();
+        setTimeout(() => {
+            redrawCanvas();
+        }, 0);
     }
 }
 function deleteElement(x, y) {
     document.body.style.cursor = 'crosshair';
     if (Device.deleteDevice(x, y)) {
-        focusedDevice = undefined;
+        clearFocus();
         resetMode();
     }
     else {
@@ -67,16 +69,12 @@ function connectDevices(x, y) {
     if (focusedDevice === undefined) {
         focusedDevice = Device.getDevice(x, y);
         redrawCanvas();
-        console.log("got first device");
     }
     else {
         let firstDevice = focusedDevice;
         let secondDevice = Device.getDevice(x, y);
         if (secondDevice !== undefined && secondDevice !== firstDevice) {
-            console.log("got second device");
-            if (Device.connectDevices(firstDevice, secondDevice)) {
-                console.log("connected!");
-            }
+            Device.connectDevices(firstDevice, secondDevice);
             resetMode();
             redrawCanvas();
         }
@@ -89,13 +87,13 @@ function resetMode() {
 }
 window.resetMode = resetMode;
 function connectMode() {
-    focusedDevice = undefined;
+    clearFocus();
     document.body.style.cursor = 'crosshair';
     current_click_func = connectDevices;
 }
 window.connectMode = connectMode;
 function deleteMode() {
-    focusedDevice = undefined;
+    clearFocus();
     document.body.style.cursor = 'crosshair';
     current_click_func = deleteElement;
 }

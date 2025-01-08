@@ -466,10 +466,12 @@ export class VirtualL3Interface extends L3Interface {
     }
 
     public async send(frame: Frame): Promise<void> {
+        console.log("sending from loopback");
         this.receive(frame, this.mac);
         return;
     }
     public async receive(frame: Frame, ingress_mac: MacAddress): Promise<void> {
+        console.log("receiving from loopback");
         this._network_controller.receive(frame, ingress_mac);
         return;
     }

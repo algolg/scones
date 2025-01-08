@@ -27,9 +27,11 @@ content {
     grid-column-start: 1;
     grid-column-end: 2;
     display: flex;
+    overflow: scroll;
 }
 .selector-option {
     transition: background-color var(--transition);
+    flex-shrink: 0;
     position: relative;
     aspect-ratio: 1;
     display: block;
@@ -53,6 +55,7 @@ content {
 }
 .selector-panel-column {
     aspect-ratio: 0.5;
+    width: min-content;
     height: 100%;
     display: flex;
     flex-direction: column;

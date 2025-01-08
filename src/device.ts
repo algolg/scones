@@ -47,21 +47,21 @@ export abstract class Device implements IdentifiedItem {
         }
     }
 
+    public static getList(): ReadonlyArray<Device> {
+        return this.DeviceList;
+    }
+
     public static getIterator(): IterableIterator<Readonly<Device>> {
         return this.DeviceList.values();
     }
 
     /**
      * Adds a device to the topology
-     * Note: this function will (likely) later become the sole way to create devices
-     * since it allows the program to create objects that are stored exclusively in the
-     * DeviceList array
      * @param device Device to add
-     * @returns Device's ID as a number
+     * @returns The added Device
      */
     public static createDevice(device: Device, x_coord: number, y_coord: number): Device {
         device.coords = [x_coord / CANVAS_WIDTH(), y_coord / CANVAS_HEIGHT()];
-        console.log(`${device.coords}`);
         return device;
     }
 
@@ -125,6 +125,21 @@ export abstract class Device implements IdentifiedItem {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Deletes all devices and their interfaces
+     */
+    public static clearTopology() {
+        for (let device of this.DeviceList) {
+            for (let l2inf of device._l2infs) {
+                InfMatrix.delete(l2inf);
+            }
+            for (let l3inf of device._l3infs) {
+                InfMatrix.delete(l3inf);
+            }
+        }
+        this.DeviceList.splice(0, this.DeviceList.length);
     }
 
     public static get numOfDevices(): number {
@@ -217,7 +232,10 @@ export abstract class Device implements IdentifiedItem {
         // check if a route exists
         if (try_route !== undefined && try_route.length > 0) {
             const next_hop = try_route[0][0];
-            const inf = this.getInfFromIpv4(try_route[0][1]);
+            const try_egress_mac = this._arp_table.get(next_hop);
+            const inf: L3Interface = try_egress_mac !== undefined ?
+                                     this.getL3InfFromMac(try_egress_mac[1]) ?? this.getInfFromIpv4(try_route[0][1]) :
+                                     this.getInfFromIpv4(try_route[0][1]);
             // if the local interface exists, try sending a frame
             if (inf !== undefined) {
                 // use the ARP table to try to get the MAC address of the next hop
@@ -258,11 +276,11 @@ export abstract class Device implements IdentifiedItem {
         return this.tryEncapsulateAndSend(Ipv4Packet.copyAndDecrement(packet));
     }
 
-    private hasL2Infs(): boolean {
+    public hasL2Infs(): boolean {
         return this._l2infs.length > 0;
     }
 
-    private hasL3Infs(): boolean {
+    public hasL3Infs(): boolean {
         return this._l3infs.length > 0;
     }
 
@@ -308,6 +326,13 @@ export abstract class Device implements IdentifiedItem {
             return this._loopback;
         }
         return [...this._l2infs, ...this._l3infs].find((x) => x.mac.compare(mac) == 0);
+    }
+
+    private getL3InfFromMac(mac: MacAddress): L3Interface {
+        if (mac.compare(MacAddress.loopback) == 0) {
+            return this._loopback;
+        }
+        return this._l3infs.find((x) => x.mac.compare(mac) == 0);
     }
 
     private getInfFromIpv4(ipv4: Ipv4Address): L3Interface {
@@ -485,25 +510,50 @@ export abstract class Device implements IdentifiedItem {
         return false;
     }
 
-    public async ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255) {
+    private logPing(datagram: IcmpDatagram, packet: Ipv4Packet) {
+        if (datagram.isEchoReply) {
+            console.log("Received reply");
+        }
+    }
+    private logError(error: string) {
+        console.log(error)
+    }
+
+    public async ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255, success_func: (IcmpDatagram, Ipv4Packet) => void = this.logPing, error_func: (string) => void = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
         
         let hits = 0;
         let echo_num = 1;
-        if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {
-            hits++
+
+        const response: [IcmpDatagram, Ipv4Packet] = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
+        if (response !== undefined) {
+            if (response[0].isEchoReply) {
+                hits++
+            }
+            success_func(response[0], response[1]);
         }
-        echo_num++;
+        else {
+            console.log(`Request timed out (${echo_num})`);
+            error_func(`Request timed out (${echo_num})`);
+        }
         const interval = setInterval(async () => {
             if (echo_num <= count) {
-                if (await this.icmpEcho(dest_ipv4, id, echo_num, ttl) === IcmpControlMessage.ECHO_REPLY) {
-                    hits++
+                const response: [IcmpDatagram, Ipv4Packet] = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
+                if (response !== undefined) {
+                    if (response[0].isEchoReply) {
+                        hits++
+                    }
+                    success_func(response[0], response[1]);
                 }
-                echo_num++;
+                else {
+                    console.log(`Request timed out (${echo_num})`);
+                    error_func(`Request timed out (${echo_num})`);
+                }
             }
             else {
                 console.log(`${hits}/${count}`)
+                error_func(`${count} pings transmitted, ${hits} received`);
                 clearInterval(interval);
             }
         }, 1000);
@@ -517,7 +567,7 @@ export abstract class Device implements IdentifiedItem {
      * @param ttl Initial time to live of the ICMP Echo
      * @returns If a response was given, the control message of the response. Otherwise, undefined.
      */
-    public async icmpEcho(dest_ipv4: Ipv4Address, id: number = 1, seq_num: number = 1, ttl: number = 255): Promise<IcmpControlMessage> {
+    public async icmpEcho(dest_ipv4: Ipv4Address, id: number = 1, seq_num: number = 1, ttl: number = 255): Promise<[IcmpDatagram,Ipv4Packet]> {
         return new Promise((resolve) => {
             if (this.hasL3Infs()) {
                 const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
@@ -528,7 +578,7 @@ export abstract class Device implements IdentifiedItem {
                 let start = performance.now();
                 const ping_socket = Socket.icmpSocketFrom(icmp_request, packet);
                 this._sockets.addIcmpSocket(ping_socket);
-                console.log("----------- socket added ----------")
+                console.log(`----------- socket ${seq_num} added ----------`)
                 let i = 0;
                 const interval_length = 100;
 
@@ -538,12 +588,12 @@ export abstract class Device implements IdentifiedItem {
                     if (datagram_received || timed_out) {
                         this._sockets.deleteIcmpSocket(ping_socket);
                         clearInterval(interval);
-                        console.log("---------- socket deleted ---------")
+                        console.log(`---------- socket ${seq_num} deleted ---------`)
                         if (datagram_received) {
                             let end = performance.now();
-                            const datagram = ping_socket.matched_top;
+                            const [datagram,packet] = ping_socket.matched_top;
                             console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
-                            resolve(datagram.type);
+                            resolve([datagram,packet]);
                             return;
                         }
                         else if (timed_out) {

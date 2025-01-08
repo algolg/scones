@@ -404,10 +404,12 @@ export class VirtualL3Interface extends L3Interface {
         super(network_controller, -1, ipv4_arr, ipv4_prefix, mac, false);
     }
     async send(frame) {
+        console.log("sending from loopback");
         this.receive(frame, this.mac);
         return;
     }
     async receive(frame, ingress_mac) {
+        console.log("receiving from loopback");
         this._network_controller.receive(frame, ingress_mac);
         return;
     }

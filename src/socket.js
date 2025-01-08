@@ -35,7 +35,7 @@ export class Socket {
     }
     check(protocol_data, packet) {
         if (this._check(protocol_data, packet)) {
-            this._matched.add(protocol_data);
+            this._matched.add([protocol_data, packet]);
             this._hits++;
             return true;
         }

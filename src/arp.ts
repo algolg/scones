@@ -143,9 +143,3 @@ export class ArpTable {
     }
 
 }
-
-// const arppacket = new ArpPacket(OP.REPLY, MacAddress.rand(), new Ipv4Address([192,168,0,10]), MacAddress.rand(), new Ipv4Address([192,168,0,50]));
-// console.log(arppacket.packet);
-// const arppacket_packet = arppacket.packet;
-// const arp_repacketed = ArpPacket.parsePacket(arppacket_packet).packet;
-// console.log(arp_repacketed);

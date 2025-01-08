@@ -40,7 +40,7 @@ export class IcmpDatagram {
     }
 
     public matchesRequest(other: IcmpDatagram): boolean {
-        return other.isEchoRequest && other.extra_space.every((val, idx) => val == this.extra_space[idx]);
+        return this.isEchoReply && other.isEchoRequest && other.extra_space.every((val, idx) => val == this.extra_space[idx]);
     }
 
     public get isEchoRequest(): boolean {

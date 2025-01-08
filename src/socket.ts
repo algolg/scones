@@ -20,7 +20,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
          */
     readonly action: Action; 
     readonly direction: Direction;
-    private readonly _matched: Set<T> = new Set();
+    private readonly _matched: Set<[T, Ipv4Packet]> = new Set();
     private _hits: number = 0;
 
     public constructor(protocol: Protocol, direction: Direction, check_function: (arg0: T, arg1: Ipv4Packet) => boolean, action: Action = Action.ACCEPT) {
@@ -36,16 +36,16 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
 
     public check(protocol_data: T, packet: Ipv4Packet): boolean {
         if (this._check(protocol_data, packet)) {
-            this._matched.add(protocol_data);
+            this._matched.add([protocol_data, packet]);
             this._hits++;
             return true;
         }
         return false;
     }
 
-    public get matched_top(): T {
+    public get matched_top(): [T, Ipv4Packet] {
         if (this._matched.size > 0) {
-            const ele: T = this._matched.values().next().value;
+            const ele: [T, Ipv4Packet] = this._matched.values().next().value;
             this._matched.delete(ele);
             return ele;
         }

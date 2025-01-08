@@ -8,6 +8,7 @@
     --bg-light: #d1cdb7;
     --bg: #afaa91;
     --bg-dark: #989082;
+    --bg-black: #27231d;
     --borders: #514e46;
 }
 
@@ -21,7 +22,7 @@ html, body {
 }
 
 ::selection {
-    background-color: #27231d;
+    background-color: var(--bg-black);
     color: var(--bg-lighter);
 }
 

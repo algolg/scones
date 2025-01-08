@@ -29,7 +29,7 @@ export class IcmpDatagram {
         this.datagram = datagram;
     }
     matchesRequest(other) {
-        return other.isEchoRequest && other.extra_space.every((val, idx) => val == this.extra_space[idx]);
+        return this.isEchoReply && other.isEchoRequest && other.extra_space.every((val, idx) => val == this.extra_space[idx]);
     }
     get isEchoRequest() {
         return this.type == IcmpControlMessage.ECHO_REQUEST;

@@ -105,6 +105,6 @@ window.onresize = () => {
     canvas.width = topology.clientWidth;
     canvas.height = topology.clientHeight;
     setDPI(canvas, 192);
-    redrawCanvas();
+    redrawCanvas(false);
 };
 //# sourceMappingURL=canvas-init.js.map

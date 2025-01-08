@@ -225,6 +225,27 @@ export class MacAddress implements Identifier {
         return new MacAddress(macArr);
     }
 
+    /**
+     * Parses a string to create a MacAddress object
+     * @param str the string to parse
+     * @returns a MacAddress object of the string, if the string is valid, or undefined otherwise
+     */
+    public static parseString(str: string): MacAddress {
+        const arr = str.split(':');
+        if (arr.length != 6) {
+            return undefined;
+        }
+        let num_arr: [number, number, number, number, number, number] = [0,0,0,0,0,0];
+        for (let i = 0; i < 6; i++) {
+            const parsed = parseInt(arr[i], 16);
+            if (isNaN(parsed) || parsed < 0 || parsed > 255) {
+                return undefined;
+            }
+            num_arr[i] = parsed;
+        }
+        return new MacAddress(num_arr);
+    }
+
     public compare(other: MacAddress): number {
         for (let i=0; i<6; i++) {
             if (this.value[i] > other.value[i]) {
@@ -293,6 +314,10 @@ export class Ipv4Address implements GeneralIpAddress {
 
     public toArray(): number[] {
         return this._value.toArray();
+    }
+
+    public toTuple(): [number,number,number,number] {
+        return [this._value[0], this._value[1], this._value[2], this._value[3]];
     }
 
     toString(): string {

@@ -126,5 +126,5 @@ window.onresize = () => {
     canvas.height = topology.clientHeight;
 
     setDPI(canvas, 192);
-    redrawCanvas();
+    redrawCanvas(false);
 }
