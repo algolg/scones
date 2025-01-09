@@ -147,10 +147,10 @@ function createMode(name: string) {
 
 function incIconSize() {
     increaseIconSize();
-    redrawCanvas();
+    redrawCanvas(false);
 } (<any>window).incIconSize = incIconSize;
 
 function decIconSize() {
     decreaseIconSize();
-    redrawCanvas();
+    redrawCanvas(false);
 } (<any>window).decIconSize = decIconSize;

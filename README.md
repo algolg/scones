@@ -7,7 +7,7 @@ Currently, the Link layer and Internet layer (i.e. layers 2 and 3 of the OSI mod
  - [791](https://datatracker.ietf.org/doc/html/rfc791) (IPv4 packet structure)
  - [792](https://datatracker.ietf.org/doc/html/rfc792) (ICMP datagram structure)
  - [826](https://datatracker.ietf.org/doc/html/rfc826) (ARP packet structure and forwarding process)
- - [1812](https://datatracker.ietf.org/doc/html/rfc1812) (IPv4 router operation -- used to model packet forwarding and ICMP error algorithms)
+ - [1812](https://datatracker.ietf.org/doc/html/rfc1812) (IPv4 router operation — used to model packet forwarding and ICMP error algorithms)
 
 ## Attribution
 Device icons are from SVG Repo ([here](https://www.svgrepo.com/collection/servers-isometric-icons/))

@@ -21,6 +21,7 @@
 }
 
 .config-option {
+    position: relative;
     border-radius: 3px;
     background-color: var(--bg);
     margin: calc(var(--border-size) * 2);
@@ -41,6 +42,7 @@
 }
 .option-dropdown-label > div {
     display: inline-block;
+    word-wrap: anywhere;
 }
 .option-dropdown-contents {
     border-radius: 3px;
@@ -69,8 +71,6 @@
 }
 .info-3 {
     width: 28%;
-    text-wrap: wrap;
-    word-wrap: break-word;
 }
 
 .option-form {

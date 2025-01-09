@@ -20,20 +20,21 @@ content {
     grid-column-end: 3;
     grid-row-start: 1;
     grid-row-end: 3;
-    overflow: scroll;
+    overflow: auto;
 }
 
 #selector-panel {
     grid-column-start: 1;
     grid-column-end: 2;
     display: flex;
-    overflow: scroll;
+    overflow-x: auto;
 }
 .selector-option {
     transition: background-color var(--transition);
     flex-shrink: 0;
     position: relative;
     aspect-ratio: 1;
+    height: calc(100% - 2*min(4px,1vmin));
     display: block;
     background-color: var(--bg);
     border: var(--border-size) solid var(--borders);
@@ -52,22 +53,24 @@ content {
     right: 0;
     margin: auto;
     max-width: 78%;
+    vertical-align: middle;
 }
 .selector-panel-column {
     aspect-ratio: 0.5;
     width: min-content;
     height: 100%;
-    display: flex;
-    flex-direction: column;
+    display: block;
 }
 .selector-panel-column > div {
-    height: calc(100% - 2*min(4px,1vmin));
+    height: calc(50% - 1.5*min(4px,1vmin));
+    width: min-content;
+    aspect-ratio: 1;
 }
 .selector-panel-column > div:first-child {
-    padding: min(4px,1vmin);
+    padding: min(4px,1vmin) 0 min(4px,1vmin) min(4px,1vmin);
 }
 .selector-panel-column > div:last-child {
-    padding: 0 min(4px,1vmin) min(4px,1vmin) min(4px,1vmin);
+    padding: 0 0 min(4px,1vmin) min(4px,1vmin);
 }
 .selector-panel-column .selector-option {
     height: 100%;
@@ -75,6 +78,12 @@ content {
 }
 .right-align {
     margin-left: auto;
+}
+.right-most {
+    margin-right: min(4px, 1vmin);
+}
+.right-align > div {
+    margin-right: 0;
 }
 
 #topology {
