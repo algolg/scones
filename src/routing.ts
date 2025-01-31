@@ -9,6 +9,7 @@ export class RoutingTable {
 
     public setLocalInfs(loopback: Ipv4Address, ...l3infs: L3Interface[]) {
         this._loopback = loopback;
+        this._local_infs.push([loopback, new Ipv4Prefix(32)]);
         l3infs.forEach((l3inf) => this._local_infs.push([l3inf.ipv4, l3inf.ipv4_prefix]));
     }
     /**

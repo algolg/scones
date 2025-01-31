@@ -108,10 +108,10 @@ class InterfaceMatrix {
         const len = this._list.length;
         let new_matrix = Array.from({ length: len }, () => Array(len).fill(0));
         for (var i = 0; i < idx; i++) {
-            new_matrix[i] = [...this._matrix[i].slice(0, idx), 0, ...this._matrix[i].slice(idx)];
+            new_matrix[i] = this._matrix[i].slice(0, idx).concat(0, this._matrix[i].slice(idx));
         }
         for (; i < len - 1; i++) {
-            new_matrix[i + 1] = [...this._matrix[i].slice(0, idx), 0, ...this._matrix[i].slice(idx)];
+            new_matrix[i + 1] = this._matrix[i].slice(0, idx).concat(0, this._matrix[i].slice(idx));
         }
         this._matrix = new_matrix;
     }
@@ -283,6 +283,7 @@ class Interface {
     constructor(network_controller, layer, num, mac, tracked = true) {
         this._status = InfStatus.UP;
         this._vlan = null;
+        this._mtu = 1500; // TODO: implement MTU
         this._network_controller = network_controller;
         this._layer = layer;
         this.num = num;

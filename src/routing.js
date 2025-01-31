@@ -7,6 +7,7 @@ export class RoutingTable {
     // network address --> AD --> [remote_gateway, local_inf]
     setLocalInfs(loopback, ...l3infs) {
         this._loopback = loopback;
+        this._local_infs.push([loopback, new Ipv4Prefix(32)]);
         l3infs.forEach((l3inf) => this._local_infs.push([l3inf.ipv4, l3inf.ipv4_prefix]));
     }
     /**

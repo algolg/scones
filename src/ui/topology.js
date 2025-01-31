@@ -138,12 +138,12 @@ function createMode(name) {
 window.createMode = createMode;
 function incIconSize() {
     increaseIconSize();
-    redrawCanvas();
+    redrawCanvas(false);
 }
 window.incIconSize = incIconSize;
 function decIconSize() {
     decreaseIconSize();
-    redrawCanvas();
+    redrawCanvas(false);
 }
 window.decIconSize = decIconSize;
 //# sourceMappingURL=topology.js.map

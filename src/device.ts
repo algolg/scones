@@ -318,7 +318,7 @@ export abstract class Device implements IdentifiedItem {
     }
 
     private hasInfWithIpv4(ipv4: Ipv4Address): boolean {
-        return this._l3infs.some((x) => x.ipv4.compare(ipv4) == 0);
+        return this._l3infs.concat(this._loopback).some((x) => x.ipv4.compare(ipv4) == 0);
     }
 
     private getInfFromMac(mac: MacAddress): L2Interface | L3Interface {
@@ -646,7 +646,7 @@ export class PersonalComputer extends Device {
         super(DeviceType.PC);
         this._l3infs.push(new L3Interface(this._network_controller, 0));
 
-        this._arp_table.setLocalInfs(...this._l3infs);
+        this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
     }
 
@@ -700,7 +700,7 @@ export class Router extends Device {
         }
         InfMatrix.link(...this._l3infs.map((x) => x.mac));
 
-        this._arp_table.setLocalInfs(...this._l3infs);
+        this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
     }
 }

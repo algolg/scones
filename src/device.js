@@ -278,7 +278,7 @@ export class Device {
         return [...this._l2infs, ...this._l3infs].some((x) => x.mac.compare(mac) == 0);
     }
     hasInfWithIpv4(ipv4) {
-        return this._l3infs.some((x) => x.ipv4.compare(ipv4) == 0);
+        return this._l3infs.concat(this._loopback).some((x) => x.ipv4.compare(ipv4) == 0);
     }
     getInfFromMac(mac) {
         if (mac.compare(MacAddress.loopback) == 0) {
@@ -575,7 +575,7 @@ export class PersonalComputer extends Device {
         super(DeviceType.PC);
         this._loopback = VirtualL3Interface.newLoopback(this._network_controller);
         this._l3infs.push(new L3Interface(this._network_controller, 0));
-        this._arp_table.setLocalInfs(...this._l3infs);
+        this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
     }
     set ipv4(ipv4) {
@@ -613,7 +613,7 @@ export class Router extends Device {
             this._l3infs.push(new L3Interface(this._network_controller, i));
         }
         InfMatrix.link(...this._l3infs.map((x) => x.mac));
-        this._arp_table.setLocalInfs(...this._l3infs);
+        this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
     }
 }

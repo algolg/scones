@@ -117,10 +117,10 @@ class InterfaceMatrix {
         let new_matrix: number[][] = Array.from({length: len}, () => Array(len).fill(0));
 
         for (var i=0; i<idx; i++) {
-            new_matrix[i] = [...this._matrix[i].slice(0,idx), 0, ...this._matrix[i].slice(idx)];
+            new_matrix[i] = this._matrix[i].slice(0,idx).concat(0, this._matrix[i].slice(idx));
         }
         for (; i<len-1; i++) {
-            new_matrix[i+1] = [...this._matrix[i].slice(0,idx), 0, ...this._matrix[i].slice(idx)];
+            new_matrix[i+1] = this._matrix[i].slice(0,idx).concat(0, this._matrix[i].slice(idx));
         }
 
         this._matrix = new_matrix;
@@ -315,6 +315,7 @@ abstract class Interface implements IdentifiedItem {
     readonly num: number;
     protected _status: InfStatus = InfStatus.UP;
     protected _vlan: number = null;
+    protected _mtu: number = 1500; // TODO: implement MTU
     protected readonly _layer: InfLayer;
     protected readonly _network_controller: NetworkController;
 
