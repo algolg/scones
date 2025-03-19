@@ -1,13 +1,13 @@
 import { Ipv4Address, Identifier, DeviceID, MacAddress, Ipv4Prefix } from "./addressing.js";
 import { ArpPacket, ArpTable, OP } from "./arp.js";
 import { ForwardingInformationBase } from "./forwarding.js";
-import { EtherType, Frame } from "./frame.js";
+import { DisplayFrame, EtherType, Frame } from "./frame.js";
 import { IcmpControlMessage, IcmpDatagram } from "./icmp.js";
 import { IdentifiedList, InfMatrix, L2Interface, L3Interface, VirtualL3Interface } from "./interface.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 import { RoutingTable } from "./routing.js";
 import { Socket, SocketTable } from "./socket.js";
-import { CANVAS_HEIGHT, CANVAS_WIDTH, ICON_SIZE } from "./ui/variables.js";
+import { CANVAS_HEIGHT, CANVAS_WIDTH, ICON_SIZE, RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
 
 export interface IdentifiedItem {
     getId(): Identifier;
@@ -30,6 +30,7 @@ export abstract class Device implements IdentifiedItem {
     protected readonly _l2infs: L2Interface[] = [];
     public readonly device_type: DeviceType;
     public coords: [number, number];
+    protected _allow_forwarding: boolean = true;
 
     private static DeviceList = new IdentifiedList<Device>();
 
@@ -242,7 +243,11 @@ export abstract class Device implements IdentifiedItem {
                 const try_mac = this._arp_table.get(next_hop);
                 if (try_mac !== undefined) {
                     setTimeout(() => {
-                        inf.send(new Frame(try_mac[0], inf.mac, EtherType.IPv4, packet.packet));
+                        const frame = new Frame(try_mac[0], inf.mac, EtherType.IPv4, packet.packet);
+                        if (RECORDING_ON) {
+                            RECORDED_FRAMES.push([new DisplayFrame(frame, inf.mac, () => this.coords)]);
+                        }
+                        inf.send(frame);
                     }, 10);
                     return IpResponse.SENT;
                 }
@@ -291,7 +296,7 @@ export abstract class Device implements IdentifiedItem {
      * The object wrapper allows each object to be passed by reference to other functions.
      */
     private analyze(frame: Frame): [{value: boolean}, {value: boolean}] {
-        let forward = {value: true};
+        let forward = {value: this._allow_forwarding && true};
         let process = {value: false};
 
         // if this device has the frame's destination MAC address, *do not* forward the frame
@@ -351,42 +356,36 @@ export abstract class Device implements IdentifiedItem {
             // this should only apply to L2 infs, since L3 infs will use their ARP table instead
             // although definitely verify that this doesn't cause issues
             this.getInfFromMac(ingress_mac)
-            if (this.getInfFromMac(ingress_mac).isL2() && !this.hasInfWithMac(frame.src_mac)  && !frame.src_mac.isBroadcast()) {
+            if (this.getInfFromMac(ingress_mac).isL2() && !this.hasInfWithMac(frame.src_mac)  && !frame.src_mac.isBroadcast() && !frame.src_mac.isLoopback()) {
                 this._forwarding_table.set(frame.src_mac, ingress_mac);
             }
-            /**
-             * Currently, processing happens before forwarding. Consider whether this is the best option.
-             * To allow for Per-Hop Behaviors, this order appears to make the most sense.
-             */
+
             // many protocols only apply to L3 devices (generalize to devices with L3 ports)
             if (should_process.value) {
-                switch (ethertype) {
-                    case EtherType.ARP: if (this.hasL3Infs()) {
-                        const packet = ArpPacket.parsePacket(frame.packet);
-                        this.processARP(packet, ingress_mac, should_forward);
-                        break;
-                    }
-                    case EtherType.IPv4: if (this.hasL3Infs())  {
-                        const packet = Ipv4Packet.parsePacket(frame.packet);
-                        if (Ipv4Packet.verifyChecksum(packet)) {
-                            console.log("IPv4 checksum verification succeeded!")
-                            this.processIpv4(packet, ingress_mac);
-                        }
-                        else {
-                            console.log("IPv4 checksum verification failed!")
-                            should_forward.value = false;
-                        }
-                        break;
-                    }
-                    case EtherType.IPv6:
-                    default:
-                        break;
+                if (ethertype <= EtherType.IEEE802dot3_Upper) {
+                    const length = ethertype;
+                    // this.process802dot3Frame(frame, ingress_mac);
                 }
+                else if (ethertype == EtherType.ARP && this.hasL3Infs()) {
+                    const packet = ArpPacket.parsePacket(frame.packet);
+                    this.processARP(packet, ingress_mac, should_forward);
+                }
+                else if (ethertype == EtherType.IPv4 && this.hasL3Infs()) {
+                    const packet = Ipv4Packet.parsePacket(frame.packet);
+                    if (Ipv4Packet.verifyChecksum(packet)) {
+                        console.log("IPv4 checksum verification succeeded!")
+                        this.processIpv4(packet, ingress_mac);
+                    }
+                    else {
+                        console.log("IPv4 checksum verification failed!")
+                        should_forward.value = false;
+                    }
+                }
+                // otherwise, drop (IPv6, others have not been implemented)
             }
         }, 0);
         setTimeout(() => {
             if (should_forward.value) {
-                console.log(`---> ${ingress_mac}: ${should_forward.value ? "should" : "should not"} forward`)
                 this.forward(frame, ingress_mac);
             }
         }, 0);
@@ -399,8 +398,15 @@ export abstract class Device implements IdentifiedItem {
         }
         // valid interfaces are up (on and connected to), not the same as the ingress, and have the same VLAN as the ingress
         const broadcast_domain = this._l2infs.filter((x) => x.isActive() && x.mac.compare(ingress_inf.mac) != 0 && x.vlan == ingress_inf.vlan);
+        let frame_set: DisplayFrame[] = [];
         for (let inf of broadcast_domain) {
+            if (RECORDING_ON) {
+                frame_set.push(new DisplayFrame(frame, inf.mac, () => this.coords));
+            }
             await inf.send(frame);
+        }
+        if (RECORDING_ON && frame_set.length > 0) {
+            RECORDED_FRAMES.push(frame_set);
         }
     }
 
@@ -423,6 +429,9 @@ export abstract class Device implements IdentifiedItem {
         else if (this._forwarding_table.has(dest_mac)) {
             const egress_inf = this.getInfFromMac(this._forwarding_table.get(dest_mac));
             if (egress_inf.isActive()) {
+                if (RECORDING_ON) {
+                    RECORDED_FRAMES.push([new DisplayFrame(frame, egress_inf.mac, () => this.coords)]);
+                }
                 await egress_inf.send(frame);
             }
         }
@@ -444,11 +453,13 @@ export abstract class Device implements IdentifiedItem {
                 this._arp_table.set(arp_request.src_pa, arp_request.src_ha, ingress_mac);
             }
             if (op == OP.REQUEST) {
-                console.log(`${this._l3infs[0].mac}: replying for ARP`);
                 should_forward.value = false
                 const arp_reply = arp_request.makeReply(try_inf.mac);
                 const frame = new Frame(arp_reply.dest_ha, try_inf.mac, EtherType.ARP, arp_reply.packet);
-                await this.getInfFromMac(try_inf.mac).send(frame);
+                if (RECORDING_ON) {
+                    RECORDED_FRAMES.push([new DisplayFrame(frame, try_inf.mac, () => this.coords)]);
+                }
+                await try_inf.send(frame);
             }
 
         }
@@ -475,7 +486,7 @@ export abstract class Device implements IdentifiedItem {
                     break;
             }
         }
-        else {
+        else if (this._allow_forwarding) {
             this.tryForward(ipv4_packet);
             return true;
         }
@@ -542,7 +553,7 @@ export abstract class Device implements IdentifiedItem {
                 const response: [IcmpDatagram, Ipv4Packet] = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
                 if (response !== undefined) {
                     if (response[0].isEchoReply) {
-                        hits++
+                        hits++;
                     }
                     success_func(response[0], response[1]);
                 }
@@ -573,7 +584,7 @@ export abstract class Device implements IdentifiedItem {
                 const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
                 const packet = new Ipv4Packet(
                     0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram
-                )
+                );
                 this.tryEncapsulateAndSend(packet)
                 let start = performance.now();
                 const ping_socket = Socket.icmpSocketFrom(icmp_request, packet);
@@ -644,6 +655,7 @@ export class PersonalComputer extends Device {
 
     public constructor() {
         super(DeviceType.PC);
+        this._allow_forwarding = false;
         this._l3infs.push(new L3Interface(this._network_controller, 0));
 
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
@@ -704,41 +716,3 @@ export class Router extends Device {
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
     }
 }
-
-async function test_icmp() {
-    const pc1 = new PersonalComputer();
-    const pc2 = new PersonalComputer();
-    const sw1 = new Switch(2);
-    const sw2 = new Switch(2);
-    const ro1 = new Router(2);
-
-    pc1.ipv4 = [192,168,0,10];
-    pc1.ipv4_prefix = 24;
-    pc1.default_gateway = [192,168,0,1]
-
-    pc2.ipv4 = [192,168,1,10];
-    pc2.ipv4_prefix = 24;
-    pc2.default_gateway = [192,168,1,1]
-
-    ro1.l3infs[0].ipv4 = [192,168,0,1];
-    ro1.l3infs[0].ipv4_prefix = 24;
-    ro1.l3infs[1].ipv4 = [192,168,1,1];
-    ro1.l3infs[1].ipv4_prefix = 24;
-
-    console.log(`pc1:\t${pc1.inf.mac}`);
-    console.log(`pc2:\t${pc2.inf.mac}`);
-    console.log(`sw1[0]:\t${sw1.l2infs[0].mac}`);
-    console.log(`sw1[1]:\t${sw1.l2infs[1].mac}`);
-    console.log(`sw2[0]:\t${sw2.l2infs[0].mac}`);
-    console.log(`sw2[1]:\t${sw2.l2infs[1].mac}`);
-    console.log(`ro1[0]:\t${ro1.l3infs[0].mac}`);
-    console.log(`ro1[1]:\t${ro1.l3infs[1].mac}`);
-
-    InfMatrix.connect(pc1.inf.mac, sw1.l2infs[0].mac);
-    InfMatrix.connect(sw1.l2infs[1].mac, ro1.l3infs[0].mac);
-    InfMatrix.connect(ro1.l3infs[1].mac, sw2.l2infs[1].mac);
-    InfMatrix.connect(sw2.l2infs[0].mac, pc2.inf.mac);
-
-    pc1.ping(pc2.ipv4, 4);
-}
-// test_icmp();

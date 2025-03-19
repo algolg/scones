@@ -2,7 +2,8 @@ import { Device, PersonalComputer, Router, Switch } from "../device.js";
 import { InfMatrix } from "../interface.js";
 import { CableList } from "./cable.js";
 import { canvas, ctx, initCanvas, pc_img, redrawCanvas, router_img, server_img, setDPI, switch_img } from "./canvas-init.js";
-import { ICON_SIZE, decreaseIconSize, increaseIconSize } from "./variables.js";
+import { displayFrames } from "./configure.js";
+import { ICON_SIZE, RECORDING_ON, ROUTER_INF_NUM, SWITCH_INF_NUM, TURN_RECORDING_OFF, TURN_RECORDING_ON, decreaseIconSize, increaseIconSize } from "./variables.js";
 let current_click_func = selectDevice;
 setDPI(canvas, 192);
 initCanvas();
@@ -98,6 +99,22 @@ function deleteMode() {
     current_click_func = deleteElement;
 }
 window.deleteMode = deleteMode;
+function toggleRecord(ele) {
+    const button = document.getElementById("recording-btn");
+    if (RECORDING_ON) {
+        button.setAttribute('src', "assets/icons/recording-off.svg");
+        ele.setAttribute('title', "Begin Recording");
+        TURN_RECORDING_OFF();
+        displayFrames();
+    }
+    else {
+        button.setAttribute('src', "assets/icons/recording-on.svg");
+        ele.setAttribute('title', "End Recording");
+        TURN_RECORDING_ON();
+    }
+}
+window.toggleRecord = toggleRecord;
+window.showRecentRecording = displayFrames;
 function createMode(name) {
     document.body.style.cursor = 'crosshair';
     switch (name.toUpperCase()) {
@@ -118,14 +135,14 @@ function createMode(name) {
             break;
         case ("ROUTER"):
             current_click_func = (x, y) => {
-                Device.createDevice(new Router(2), x, y);
+                Device.createDevice(new Router(ROUTER_INF_NUM), x, y);
                 ctx.drawImage(router_img, x - ICON_SIZE / 2, y - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE);
                 resetMode();
             };
             break;
         case ("SWITCH"):
             current_click_func = (x, y) => {
-                Device.createDevice(new Switch(5), x, y);
+                Device.createDevice(new Switch(SWITCH_INF_NUM), x, y);
                 ctx.drawImage(switch_img, x - ICON_SIZE / 2, y - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE);
                 resetMode();
             };

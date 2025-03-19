@@ -3,6 +3,7 @@ import { Device, DeviceType, PersonalComputer, Router, Switch } from "../device.
 import { InfMatrix } from "../interface.js";
 import { redrawCanvas } from "./canvas-init.js";
 import { clearFocus } from "./topology.js";
+import { ROUTER_INF_NUM, SWITCH_INF_NUM } from "./variables.js";
 const fileUpload = document.getElementById('environment-file-upload');
 function exportEnvironment(anchor) {
     const env = JSON.stringify({
@@ -44,10 +45,10 @@ async function loadJSON(input) {
                     new_device = new PersonalComputer();
                     break;
                 case (DeviceType.ROUTER):
-                    new_device = new Router(2);
+                    new_device = new Router(ROUTER_INF_NUM);
                     break;
                 case (DeviceType.SWITCH):
-                    new_device = new Switch(5);
+                    new_device = new Switch(SWITCH_INF_NUM);
                     break;
             }
             if (l3infs.length != new_device.l3infs.length || l2infs.length != new_device.l2infs.length) {

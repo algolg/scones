@@ -220,6 +220,9 @@ export class MacAddress {
     isBroadcast() {
         return this.compare(MacAddress.broadcast) == 0;
     }
+    isLoopback() {
+        return this.compare(MacAddress.loopback) == 0;
+    }
     toBinary() {
         return Array.from(this.value).map((x) => (x).toString(2).padStart(8, "0")).join("");
     }

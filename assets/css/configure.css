@@ -130,3 +130,10 @@
     text-wrap: wrap;
     word-wrap: break-word;
 }
+
+.arp-label {
+    color: #fff125;
+}
+.icmp-label {
+    color: #3d3dee;
+}

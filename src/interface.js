@@ -1,6 +1,7 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing.js";
 import { ArpPacket, OP } from "./arp.js";
-import { EtherType, Frame } from "./frame.js";
+import { DisplayFrame, EtherType, Frame } from "./frame.js";
+import { RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
 var InfStatus;
 (function (InfStatus) {
     InfStatus[InfStatus["DOWN"] = 0] = "DOWN";
@@ -135,6 +136,13 @@ class InterfaceMatrix {
     }
     existsMac(mac) {
         return this._list.existsId(mac);
+    }
+    getCoords(mac) {
+        const idx = this._list.indexOfId(mac);
+        if (idx !== undefined) {
+            return this._list[idx].coords;
+        }
+        return undefined;
     }
     getRow(mac) {
         return this._matrix[this._list.indexOfId(mac)];
@@ -378,7 +386,7 @@ export class L3Interface extends Interface {
         return this._ipv4;
     }
     set ipv4_prefix(ipv4_prefix) {
-        this._ipv4_prefix.value = ipv4_prefix & 0x3F;
+        this._ipv4_prefix.value = ipv4_prefix & 0x3F; // TODO fix this (allows prefix up to /63)
     }
     get ipv4_prefix() {
         return this._ipv4_prefix;
@@ -395,6 +403,9 @@ export class L3Interface extends Interface {
         const arppacket = new ArpPacket(OP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
         const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
         setTimeout(() => {
+            if (RECORDING_ON) {
+                RECORDED_FRAMES.push([new DisplayFrame(frame, this._mac, () => this.coords)]);
+            }
             this.send(frame);
         }, 10);
         return true;

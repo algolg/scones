@@ -14,14 +14,20 @@ export const pc_img = new Image();
 export const server_img = new Image();
 export const router_img = new Image();
 export const switch_img = new Image();
+const packet_img = new Image();
+const packet_flipped_img = new Image();
 pc_img.src = "assets/icons/pc.svg";
 server_img.src = "assets/icons/server.svg";
 router_img.src = "assets/icons/router.svg";
 switch_img.src = "assets/icons/switch.svg";
+packet_img.src = "assets/icons/packet.svg";
+packet_flipped_img.src = "assets/icons/packet-flipped.svg";
 pc_img.width = pc_img.height =
     server_img.width = server_img.height =
         router_img.width = router_img.height =
             switch_img.width = switch_img.height = ICON_SIZE;
+packet_img.width = packet_img.height =
+    packet_flipped_img.width = packet_flipped_img.height = ICON_SIZE / 2;
 // https://stackoverflow.com/questions/14488849/higher-dpi-graphics-with-html5-canvas
 export function setDPI(canvas, dpi) {
     // Set up CSS size.
@@ -98,9 +104,30 @@ export function redrawCanvas(display = true) {
         ctx.stroke();
     }
     else {
-        resetConfigurePanel();
+        if (display) {
+            resetConfigurePanel();
+        }
     }
 }
+export function drawFrame(...frame_info_set) {
+    redrawCanvas(false);
+    for (let frame_info of frame_info_set) {
+        const x = frame_info[0] * canvas.width;
+        const y = frame_info[1] * canvas.height;
+        let frame_angle = frame_info[2];
+        let img = packet_img;
+        if (frame_angle > Math.PI / 2 || frame_angle < -Math.PI / 2) {
+            frame_angle += Math.PI;
+            img = packet_flipped_img;
+        }
+        ctx.translate(x, y);
+        ctx.rotate(frame_angle);
+        ctx.drawImage(img, -ICON_SIZE / 4, -ICON_SIZE / 4, ICON_SIZE / 2, ICON_SIZE / 2);
+        ctx.rotate(-frame_angle);
+        ctx.translate(-x, -y);
+    }
+}
+window.drawFrame = drawFrame;
 window.onresize = () => {
     canvas.width = topology.clientWidth;
     canvas.height = topology.clientHeight;

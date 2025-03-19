@@ -40,6 +40,18 @@
                     </button>
                 </div>
             </div>
+            <div class="selector-panel-column">
+                <div>
+                    <button onclick="showRecentRecording()" class="selector-option" title="Show Recent Recording">
+                        <img src="assets/icons/history.svg" draggable="false"/>
+                    </button>
+                </div>
+                <div>
+                    <button onclick="toggleRecord(this)" class="selector-option" title="Begin Recording">
+                        <img id="recording-btn" src="assets/icons/recording-off.svg" draggable="false"/>
+                    </button>
+                </div>
+            </div>
             <button onclick="createMode('PC')" class="selector-option" title="Add a PC">
                 <img src="assets/icons/pc.svg" draggable="false"/>
             </button>

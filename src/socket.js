@@ -16,14 +16,15 @@ export var Protocol;
 (function (Protocol) {
     Protocol[Protocol["IPv4"] = 0] = "IPv4";
     Protocol[Protocol["ICMP"] = 1] = "ICMP";
-    Protocol[Protocol["TCP"] = 2] = "TCP";
-    Protocol[Protocol["UDP"] = 3] = "UDP";
+    Protocol[Protocol["ARP"] = 2] = "ARP";
+    Protocol[Protocol["TCP"] = 3] = "TCP";
+    Protocol[Protocol["UDP"] = 4] = "UDP";
 })(Protocol || (Protocol = {}));
 ;
 export class Socket {
     constructor(protocol, direction, check_function, action = Action.ACCEPT) {
         this._createResponse = (packet) => undefined;
-        this._matched = new Set();
+        this._matched = new Set(); // this should probably be turned into a Queue (i.e. just use a list and use .shift() to pop)
         this._hits = 0;
         this.protocol = protocol;
         this.direction = direction;

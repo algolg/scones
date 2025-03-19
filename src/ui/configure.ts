@@ -1,9 +1,13 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "../addressing.js";
 import { Device } from "../device.js";
+import { DisplayFrame, EtherType } from "../frame.js";
 import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../icmp.js";
-import { InfLayer } from "../interface.js";
+import { InfLayer, InfMatrix } from "../interface.js";
 import { Ipv4Packet } from "../ip.js";
+import { Protocol } from "../socket.js";
+import { getExplanation } from "./explain.js";
 import { focusedDevice } from "./topology.js";
+import { RECORDED_FRAMES } from "./variables.js";
 
 export const configurePanel = document.getElementById('configure-panel');
 
@@ -113,6 +117,24 @@ const pingTool = () => `
 </div>
 `
 
+const frameListing = (display_frame_set: DisplayFrame[], idx: number, frame_coords: [number, number][], frame_angle: number[], protocol: Protocol, explanation: string) => {
+    let onchangeParam = [];
+    for (let i=0; i<frame_coords.length; i++) {
+        onchangeParam.push(`[${frame_coords[i][0]}, ${frame_coords[i][1]}, ${frame_angle[i]}]`);
+    }
+    return `
+    <div class="config-option frame-listing">
+        <input id="frame${idx}-dropdown" onchange="drawFrame(${onchangeParam.join(',')})" class="option-dropdown" name="frame-selector" type="radio">
+        <label for="frame${idx}-dropdown" class="option-dropdown-label frame-label">
+            <div class="ethertype ${Protocol[protocol].toLowerCase()}-label">${Protocol[protocol]}</div>
+            <div class="info-1">${display_frame_set[0].frame.src_mac} to ${display_frame_set[0].frame.dest_mac}</div>
+        </label>
+        <div class="option-dropdown-contents">
+            <div>${explanation}</div>
+        </div>
+    </div>
+    `
+}
 
 function clearConfigurePanel() {
     configurePanel.innerHTML = '';
@@ -139,6 +161,45 @@ export function displayInfo(device: Device) {
         configurePanel.innerHTML += `<h2>Tools</h2>`;
         configurePanel.innerHTML += pingTool();
         document.getElementById('execute-ping-form').addEventListener("submit", x => x.preventDefault());
+    }
+}
+
+export function displayFrames() {
+    clearConfigurePanel();
+    configurePanel.innerHTML += `<h2>Captured Frames</h2>`;
+    const frame_sets = RECORDED_FRAMES;
+    for (let i = 0; i < frame_sets.length; i++) {
+        const frame_set = frame_sets[i];
+
+        let frame_coords_set: [number, number][] = []; // coords at which to place the frame image
+        let frame_angle_set: number[] = []; // angle to rotate the frame image, in radians
+        for (let frame of frame_set) {
+            let frame_coords: [number, number];
+            let frame_angle: number;
+            if (frame.frame.src_mac.isLoopback() || frame.frame.dest_mac.isLoopback()) {
+                frame_coords = frame.sender_coords();
+                frame_angle = 0;
+            }
+            else {
+                const src_coords = frame.sender_coords();
+                console.log(`${frame.egress_mac}`);
+                const dest_inf = InfMatrix.getNeighborInf(frame.egress_mac);
+                console.log(`${dest_inf}`);
+                if (src_coords === undefined || dest_inf === undefined) {
+                    throw "invalid frame";
+                }
+                frame_coords = [
+                    (src_coords[0] + dest_inf.coords[0]) / 2,
+                    (src_coords[1] + dest_inf.coords[1]) / 2
+                ];
+                frame_angle = Math.atan2(dest_inf.coords[1] - src_coords[1], dest_inf.coords[0] - src_coords[0]);
+            }
+            frame_coords_set.push(frame_coords);
+            frame_angle_set.push(frame_angle);
+        }
+        const info = getExplanation(frame_set[0].frame);
+
+        configurePanel.innerHTML += frameListing(frame_set, i, frame_coords_set, frame_angle_set, info[0], info[1]);
     }
 }
 
@@ -187,7 +248,7 @@ function updateIpv4Prefix(ele: HTMLInputElement) {
         return;
     }
     const prefix = ele.valueAsNumber;
-    if (prefix === undefined || prefix < 0 || prefix > 30) {
+    if (prefix === undefined || prefix < 0 || prefix > 32) {
         return;
     }
 
