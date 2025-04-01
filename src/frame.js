@@ -1,6 +1,7 @@
 import { spread } from "./addressing.js";
 export var EtherType;
 (function (EtherType) {
+    EtherType[EtherType["IEEE802dot3_Upper"] = 1500] = "IEEE802dot3_Upper";
     EtherType[EtherType["IPv4"] = 2048] = "IPv4";
     EtherType[EtherType["ARP"] = 2054] = "ARP";
     EtherType[EtherType["IPv6"] = 34525] = "IPv6";
@@ -49,6 +50,13 @@ export class Frame {
     }
     printFrame() {
         console.log(this._frame.toHex());
+    }
+}
+export class DisplayFrame {
+    constructor(frame, egress_mac, sender_coords) {
+        this.frame = frame;
+        this.egress_mac = egress_mac;
+        this.sender_coords = sender_coords;
     }
 }
 //# sourceMappingURL=frame.js.map
