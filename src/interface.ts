@@ -464,7 +464,8 @@ export class L3Interface extends Interface {
         const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
         setTimeout(() => {
             if (RECORDING_ON) {
-                RECORDED_FRAMES.push([new DisplayFrame(frame, this._mac, () => this.coords)]);
+                const timestamp = performance.now();
+                RECORDED_FRAMES.push([[new DisplayFrame(frame, this._mac, () => this.coords)], timestamp]);
             }
             this.send(frame);
         }, 10)

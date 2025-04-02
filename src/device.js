@@ -217,7 +217,8 @@ export class Device {
                     setTimeout(() => {
                         const frame = new Frame(try_mac[0], inf.mac, EtherType.IPv4, packet.packet);
                         if (RECORDING_ON) {
-                            RECORDED_FRAMES.push([new DisplayFrame(frame, inf.mac, () => this.coords)]);
+                            const timestamp = performance.now();
+                            RECORDED_FRAMES.push([[new DisplayFrame(frame, inf.mac, () => this.coords)], timestamp]);
                         }
                         inf.send(frame);
                     }, 10);
@@ -352,6 +353,7 @@ export class Device {
         // valid interfaces are up (on and connected to), not the same as the ingress, and have the same VLAN as the ingress
         const broadcast_domain = this._l2infs.filter((x) => x.isActive() && x.mac.compare(ingress_inf.mac) != 0 && x.vlan == ingress_inf.vlan);
         let frame_set = [];
+        const timestamp = performance.now();
         for (let inf of broadcast_domain) {
             if (RECORDING_ON) {
                 frame_set.push(new DisplayFrame(frame, inf.mac, () => this.coords));
@@ -359,7 +361,7 @@ export class Device {
             await inf.send(frame);
         }
         if (RECORDING_ON && frame_set.length > 0) {
-            RECORDED_FRAMES.push(frame_set);
+            RECORDED_FRAMES.push([frame_set, timestamp]);
         }
     }
     /**
@@ -382,7 +384,8 @@ export class Device {
             const egress_inf = this.getInfFromMac(this._forwarding_table.get(dest_mac));
             if (egress_inf.isActive()) {
                 if (RECORDING_ON) {
-                    RECORDED_FRAMES.push([new DisplayFrame(frame, egress_inf.mac, () => this.coords)]);
+                    const timestamp = performance.now();
+                    RECORDED_FRAMES.push([[new DisplayFrame(frame, egress_inf.mac, () => this.coords)], timestamp]);
                 }
                 await egress_inf.send(frame);
             }
@@ -408,7 +411,8 @@ export class Device {
                 const arp_reply = arp_request.makeReply(try_inf.mac);
                 const frame = new Frame(arp_reply.dest_ha, try_inf.mac, EtherType.ARP, arp_reply.packet);
                 if (RECORDING_ON) {
-                    RECORDED_FRAMES.push([new DisplayFrame(frame, try_inf.mac, () => this.coords)]);
+                    const timestamp = performance.now();
+                    RECORDED_FRAMES.push([[new DisplayFrame(frame, try_inf.mac, () => this.coords)], timestamp]);
                 }
                 await try_inf.send(frame);
             }

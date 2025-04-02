@@ -20,6 +20,18 @@
     margin: 0.25em 0.3em;
 }
 
+#configure-panel h3 {
+    margin: 0.5em 0.3em 0.25em;
+}
+#configure-panel h3::before {
+    color: var(--bg-dark);
+    content: '- '
+}
+#configure-panel h3::after {
+    color: var(--bg-dark);
+    content: ' -'
+}
+
 .config-option {
     position: relative;
     border-radius: 3px;

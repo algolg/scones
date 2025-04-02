@@ -167,9 +167,17 @@ export function displayInfo(device: Device) {
 export function displayFrames() {
     clearConfigurePanel();
     configurePanel.innerHTML += `<h2>Captured Frames</h2>`;
+    configurePanel.innerHTML += `<h3>0:00</h3>`;
     const frame_sets = RECORDED_FRAMES;
+    let first_timestamp: number = frame_sets[0][1];
+    let section_top_timestamp = first_timestamp;
     for (let i = 0; i < frame_sets.length; i++) {
-        const frame_set = frame_sets[i];
+        const [frame_set, timestamp] = frame_sets[i];
+        if (timestamp - section_top_timestamp >= 1000) {
+            const seconds = Math.trunc((timestamp - first_timestamp) / 1000);
+            configurePanel.innerHTML += `<h3>${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}</h3>`;
+            section_top_timestamp = timestamp;
+        }
 
         let frame_coords_set: [number, number][] = []; // coords at which to place the frame image
         let frame_angle_set: number[] = []; // angle to rotate the frame image, in radians

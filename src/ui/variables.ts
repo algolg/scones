@@ -3,7 +3,7 @@ import { DisplayFrame, EtherType, Frame } from "../frame.js";
 const canvas = <HTMLCanvasElement>document.getElementById('canvas');
 
 export let RECORDING_ON: boolean = false;
-export let RECORDED_FRAMES: DisplayFrame[][] = [];
+export let RECORDED_FRAMES: [DisplayFrame[], number][] = [];
 export let TURN_RECORDING_ON = () => {
     RECORDING_ON = true;
     RECORDED_FRAMES = [];
