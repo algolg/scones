@@ -23,7 +23,9 @@ export class IdentifiedList extends Array {
     push(item) {
         super.push(item);
         super.sort((a, b) => a.compare(b));
+        // instead of pushing and sorting, could just find the index to place new item and insert ( super.splice(idx,0,item) )
         return super.indexOf(item);
+        // return idx;
     }
     /**
      * Deletes an IdentifiedItem
@@ -106,6 +108,7 @@ class InterfaceMatrix {
     push(inf) {
         const idx = this._list.push(inf);
         const len = this._list.length;
+        // can also use splice here instead of remaking?
         let new_matrix = Array.from({ length: len }, () => Array(len).fill(0));
         for (var i = 0; i < idx; i++) {
             new_matrix[i] = this._matrix[i].slice(0, idx).concat(0, this._matrix[i].slice(idx));
