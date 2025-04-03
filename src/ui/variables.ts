@@ -1,4 +1,4 @@
-import { DisplayFrame, EtherType, Frame } from "../frame.js";
+import { DisplayFrame } from "../frame.js";
 
 const canvas = <HTMLCanvasElement>document.getElementById('canvas');
 

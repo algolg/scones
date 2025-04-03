@@ -149,3 +149,16 @@
 .icmp-label {
     color: #3d3dee;
 }
+
+#frame-selectors {
+    margin: 0.25em 0.3em;
+}
+
+.arp-frame,
+.icmp-frame {
+    display: none;
+}
+#frame-selectors:has(> #arp-select:checked) ~ .arp-frame,
+#frame-selectors:has(> #icmp-select:checked) ~ .icmp-frame {
+    display: block;
+}

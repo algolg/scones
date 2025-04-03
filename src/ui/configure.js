@@ -113,7 +113,7 @@ const frameListing = (display_frame_set, idx, frame_coords, frame_angle, protoco
         onchangeParam.push(`[${frame_coords[i][0]}, ${frame_coords[i][1]}, ${frame_angle[i]}]`);
     }
     return `
-    <div class="config-option frame-listing">
+    <div class="config-option frame-listing ${Protocol[protocol].toLowerCase()}-frame">
         <input id="frame${idx}-dropdown" onchange="drawFrame(${onchangeParam.join(',')})" class="option-dropdown" name="frame-selector" type="radio">
         <label for="frame${idx}-dropdown" class="option-dropdown-label frame-label">
             <div class="ethertype ${Protocol[protocol].toLowerCase()}-label">${Protocol[protocol]}</div>
@@ -153,13 +153,24 @@ export function displayInfo(device) {
 export function displayFrames() {
     clearConfigurePanel();
     configurePanel.innerHTML += `<h2>Captured Frames</h2>`;
-    configurePanel.innerHTML += `<h3>0:00</h3>`;
+    configurePanel.innerHTML +=
+        `
+    <div id="frame-selectors">
+        <input id="arp-select" type="checkbox" checked/>
+        <label for="arp-select">ARP</label>
+        <input id="icmp-select" type="checkbox" checked/>
+        <label for="ICMP-select">ICMP</label>
+    </div>
+    `;
     const frame_sets = RECORDED_FRAMES;
+    if (frame_sets.length > 0) {
+        configurePanel.innerHTML += `<h3>0:00</h3>`;
+    }
     let first_timestamp = frame_sets[0][1];
     let section_top_timestamp = first_timestamp;
     for (let i = 0; i < frame_sets.length; i++) {
         const [frame_set, timestamp] = frame_sets[i];
-        if (timestamp - section_top_timestamp >= 1000) {
+        if (timestamp - section_top_timestamp >= 999) {
             const seconds = Math.trunc((timestamp - first_timestamp) / 1000);
             configurePanel.innerHTML += `<h3>${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}</h3>`;
             section_top_timestamp = timestamp;
