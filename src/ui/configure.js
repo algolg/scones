@@ -159,7 +159,7 @@ export function displayFrames() {
         <input id="arp-select" type="checkbox" checked/>
         <label for="arp-select">ARP</label>
         <input id="icmp-select" type="checkbox" checked/>
-        <label for="ICMP-select">ICMP</label>
+        <label for="icmp-select">ICMP</label>
     </div>
     `;
     const frame_sets = RECORDED_FRAMES;

@@ -143,6 +143,25 @@
     word-wrap: break-word;
 }
 
+.packet-type {
+    font-weight: 600;
+}
+.packet-from::before {
+    content: 'From: ';
+    display: inline-block;
+    width: 3em;
+}
+.packet-to::before {
+    content: 'To: ';
+    display: inline-block;
+    width: 3em;
+}
+.packet-description {
+    border-top: 2px dashed var(--bg-black);
+    padding: 2px 3px;
+    margin-top: 5px;
+}
+
 .arp-label {
     color: #fff125;
 }

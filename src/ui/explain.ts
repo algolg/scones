@@ -6,7 +6,11 @@ import { Protocol } from "../socket.js";
 
 export function getExplanation(frame: Frame): [Protocol, string] {
     const ethertype = frame.ethertype;
-    let explanation: string = "";
+
+    let type: string = "";
+    let from: string = "";
+    let to: string = "";
+    let description: string = "";
     let protocol: Protocol;
 
     if (ethertype <= EtherType.IEEE802dot3_Upper) {
@@ -15,54 +19,81 @@ export function getExplanation(frame: Frame): [Protocol, string] {
     else if (ethertype == EtherType.ARP) {
         protocol = Protocol.ARP;
         const packet = ArpPacket.parsePacket(frame.packet);
+
+        from = packet.src_pa.toString();
+        to = packet.dest_pa.toString();
         switch (packet.op) {
             case OP.REQUEST:
-                explanation = `Device ${packet.src_pa} (${packet.src_ha}) is requesting the MAC address associated with the IPv4 address ${packet.dest_pa}`;
+                type = 'Request';
+                description = `Requesting the MAC address of the interface which has IP address ${to}`;
                 break;
             case OP.REPLY:
-                explanation = `Device ${packet.src_pa} (${packet.src_ha}) is letting device ${packet.dest_pa} (${packet.dest_ha}) know its MAC address`;
+                type = 'Reply';
+                description = `IP address ${from} has MAC address ${packet.src_ha}`;
                 break;
             default:
-                explanation = "ARP Packet with unknown operation"
+                description = "ARP Packet with unknown operation"
                 break;
         }
     }
     else if (ethertype == EtherType.IPv4) {
         protocol = Protocol.IPv4;
         const packet = Ipv4Packet.parsePacket(frame.packet);
+
+        from = packet.src.toString();
+        to = packet.dest.toString();
         switch (packet.protocol) {
             case InternetProtocolNumbers.ICMP:
                 protocol = Protocol.ICMP;
-                explanation = getICMPExplanation(packet);
+                [type, description] = getICMPExplanation(packet);
                 break;
         }
     }
 
+    let explanation =
+    `
+    <div class="packet-type packet-type-${type.toLowerCase().replace(/\s/g, '-')}">${type}</div>
+    <div class="packet-from">${from}</div>
+    <div class="packet-to">${to}</div>
+    <div class="packet-description">${description}</div>
+    `
+
     return [protocol, explanation];
 }
 
-function getICMPExplanation(packet: Ipv4Packet): string {
+function getICMPExplanation(packet: Ipv4Packet): [string, string] {
     const icmp_datagram = IcmpDatagram.parse(packet.data);
+
+    let type_str: string = "";
     let explanation: string = "";
+
     const type = icmp_datagram.type;
     const code = icmp_datagram.code;
     switch (type) {
         case IcmpControlMessage.ECHO_REQUEST:
+            type_str = "Echo Request";
             explanation = `Device ${packet.src} is attempting to reach ${packet.dest}`;
             break;
         case IcmpControlMessage.ECHO_REPLY:
+            type_str = "Echo Reply";
             explanation = `Device ${packet.src} is responding to ${packet.dest}'s request`;
             break;
         case IcmpControlMessage.TIME_EXCEEDED:
-            explanation = `Device ${packet.src} is informing ${packet.dest} that their request expired in transit`;
+            type_str = "Time Exceeded";
+            explanation = `Request expired in transit`;
             break;
         case IcmpControlMessage.UNREACHABLE:
             switch (code) {
                 case IcmpUnreachableCode.HOST:
-                    explanation = `Device ${packet.src} is informing ${packet.dest} that their request cannot be forwarded because the destination host could not be found`;
+                    type_str = "Host Unreachable"
+                    explanation = `Request could not be forwarded because ${packet.src} could not find the destination host`;
                     break;
                 case IcmpUnreachableCode.NET:
-                    explanation = `Device ${packet.src} is informing ${packet.dest} that their request cannot be forwarded because no route to the destination network was found`;
+                    type_str = "Network Unreachable"
+                    explanation = `Request could not be forwarded because ${packet.src} could not find a route to the destination network`;
+                    break;
+                default:
+                    type_str = "Unreachable";
                     break;
             }
             break;
@@ -71,5 +102,5 @@ function getICMPExplanation(packet: Ipv4Packet): string {
             break;
     }
 
-    return explanation;
+    return [type_str, explanation];
 }
