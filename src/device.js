@@ -463,42 +463,33 @@ export class Device {
     logError(error) {
         console.log(error);
     }
-    async ping(dest_ipv4, count = Number.MAX_VALUE, ttl = 255, success_func = this.logPing, error_func = this.logError) {
+    ping(dest_ipv4, count = Number.MAX_VALUE, ttl = 255, success_func = this.logPing, error_func = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
         let hits = 0;
         let echo_num = 1;
-        const response = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-        if (response !== undefined) {
-            if (response[0].isEchoReply) {
-                hits++;
+        (async function processEcho(device) {
+            const start = performance.now();
+            const response = await device.icmpEcho(dest_ipv4, id, echo_num++, ttl);
+            const end = performance.now();
+            if (response !== undefined) {
+                if (response[0].isEchoReply) {
+                    hits++;
+                }
+                success_func(response[0], response[1]);
             }
-            success_func(response[0], response[1]);
-        }
-        else {
-            console.log(`Request timed out (${echo_num})`);
-            error_func(`Request timed out (${echo_num})`);
-        }
-        const interval = setInterval(async () => {
+            else {
+                console.log(`Request timed out`);
+                error_func(`Request timed out`);
+            }
             if (echo_num <= count) {
-                const response = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-                if (response !== undefined) {
-                    if (response[0].isEchoReply) {
-                        hits++;
-                    }
-                    success_func(response[0], response[1]);
-                }
-                else {
-                    console.log(`Request timed out (${echo_num})`);
-                    error_func(`Request timed out (${echo_num})`);
-                }
+                setTimeout(async () => await processEcho(device), Math.abs(1000 - (end - start)));
             }
             else {
                 console.log(`${hits}/${count}`);
                 error_func(`${count} pings transmitted, ${hits} received`);
-                clearInterval(interval);
             }
-        }, 1000);
+        })(this);
     }
     /**
      * Sends an ICMP Echo and looks for a response

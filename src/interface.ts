@@ -419,7 +419,7 @@ export class L3Interface extends Interface {
     private _ipv4_prefix: Ipv4Prefix;
     // private _ipv6: Ipv6Address; this won't work yet
 
-    public constructor(network_controller: NetworkController, num: number, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 0, mac?: MacAddress, tracked: boolean = true) {
+    public constructor(network_controller: NetworkController, num: number, ipv4_arr: [number, number, number ,number] = [0,0,0,0], ipv4_prefix: number = 32, mac?: MacAddress, tracked: boolean = true) {
         super(network_controller, InfLayer.L3, num, mac, tracked);
         this._ipv4 = new Ipv4Address(ipv4_arr);
         this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);

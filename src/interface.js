@@ -366,7 +366,7 @@ export class L2Interface extends Interface {
 }
 export class L3Interface extends Interface {
     // private _ipv6: Ipv6Address; this won't work yet
-    constructor(network_controller, num, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 0, mac, tracked = true) {
+    constructor(network_controller, num, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 32, mac, tracked = true) {
         super(network_controller, InfLayer.L3, num, mac, tracked);
         this._ipv4 = new Ipv4Address(ipv4_arr);
         this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);

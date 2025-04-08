@@ -519,44 +519,36 @@ export abstract class Device implements IdentifiedItem {
         console.log(error)
     }
 
-    public async ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255, success_func: (IcmpDatagram, Ipv4Packet) => void = this.logPing, error_func: (string) => void = this.logError) {
+    public ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255, success_func: (IcmpDatagram, Ipv4Packet) => void = this.logPing, error_func: (string) => void = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
         
         let hits = 0;
         let echo_num = 1;
 
-        const response: [IcmpDatagram, Ipv4Packet] = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-        if (response !== undefined) {
-            if (response[0].isEchoReply) {
-                hits++
+        (async function processEcho(device: Device) {
+            const start = performance.now();
+            const response: [IcmpDatagram, Ipv4Packet] = await device.icmpEcho(dest_ipv4, id, echo_num++, ttl);
+            const end = performance.now();
+            if (response !== undefined) {
+                if (response[0].isEchoReply) {
+                    hits++;
+                }
+                success_func(response[0], response[1]);
             }
-            success_func(response[0], response[1]);
-        }
-        else {
-            console.log(`Request timed out (${echo_num})`);
-            error_func(`Request timed out (${echo_num})`);
-        }
-        const interval = setInterval(async () => {
+            else {
+                console.log(`Request timed out`);
+                error_func(`Request timed out`);
+            }
+
             if (echo_num <= count) {
-                const response: [IcmpDatagram, Ipv4Packet] = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-                if (response !== undefined) {
-                    if (response[0].isEchoReply) {
-                        hits++
-                    }
-                    success_func(response[0], response[1]);
-                }
-                else {
-                    console.log(`Request timed out (${echo_num})`);
-                    error_func(`Request timed out (${echo_num})`);
-                }
+                setTimeout(async () => await processEcho(device), Math.abs(1000 - (end-start)));
             }
             else {
                 console.log(`${hits}/${count}`)
                 error_func(`${count} pings transmitted, ${hits} received`);
-                clearInterval(interval);
             }
-        }, 1000);
+        })(this);
     }
 
     /**
