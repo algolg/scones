@@ -496,6 +496,10 @@ export class Device {
         let hits = 0;
         let echo_num = 1;
         (async function processEcho(device) {
+            let id_str = device._env.get('PING_SEQ');
+            if (id_str !== undefined && parseInt(id_str) != id) {
+                return;
+            }
             const start = performance.now();
             const response = await device.icmpEcho(dest_ipv4, id, echo_num++, ttl);
             const end = performance.now();
