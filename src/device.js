@@ -497,7 +497,8 @@ export class Device {
                 error_func(`Request timed out`);
             }
             if (echo_num <= count) {
-                setTimeout(async () => await processEcho(device), Math.abs(1000 - (end - start)));
+                const wait_time = 1000 - (end - start);
+                setTimeout(async () => await processEcho(device), Math.max(wait_time, 0));
             }
             else {
                 console.log(`${hits}/${count}`);
