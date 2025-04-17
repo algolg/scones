@@ -162,6 +162,15 @@
     margin-top: 5px;
 }
 
+.packet-extra-info {
+    margin-top: 3px;
+}
+.packet-field-ttl::before {
+    content: 'TTL: ';
+    display: inline-block;
+    width: 3em;
+}
+
 .arp-label {
     color: #fff125;
 }

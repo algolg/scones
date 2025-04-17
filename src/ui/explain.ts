@@ -13,6 +13,9 @@ export function getExplanation(frame: Frame): [Protocol, string] {
     let description: string = "";
     let protocol: Protocol;
 
+    let extra_fields_name: string[] = []
+    let extra_fields_val: string[] = []
+
     if (ethertype <= EtherType.IEEE802dot3_Upper) {
 
     }
@@ -40,6 +43,9 @@ export function getExplanation(frame: Frame): [Protocol, string] {
         protocol = Protocol.IPv4;
         const packet = Ipv4Packet.parsePacket(frame.packet);
 
+        extra_fields_name.push("TTL");
+        extra_fields_val.push(packet.ttl.toString());
+
         from = packet.src.toString();
         to = packet.dest.toString();
         switch (packet.protocol) {
@@ -50,13 +56,21 @@ export function getExplanation(frame: Frame): [Protocol, string] {
         }
     }
 
+    let extra_info = "";
+    for (let i = 0; i < extra_fields_name.length; i++) {
+        extra_info += `<div class="packet-field-${extra_fields_name[i].toLowerCase().replace(/\s/g, '-')}">${extra_fields_val[i]}</div>\n`;
+    }
+
     let explanation =
     `
     <div class="packet-type packet-type-${type.toLowerCase().replace(/\s/g, '-')}">${type}</div>
-    <div class="packet-from">${from}</div>
-    <div class="packet-to">${to}</div>
+    <div class="packet-params">
+        <div class="packet-from">${from}</div>
+        <div class="packet-to">${to}</div>
+        ${extra_fields_name.length > 0 ? `<div class="packet-extra-info">${extra_info}</div>` : ''}
+    </div>
     <div class="packet-description">${description}</div>
-    `
+    `;
 
     return [protocol, explanation];
 }
