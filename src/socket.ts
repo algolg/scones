@@ -3,7 +3,7 @@ import { Ipv4Packet } from "./ip.js";
 
 export enum Action { BLOCK, ACCEPT, SEND/*?*/ };
 export enum Direction { EITHER, IN, OUT };
-export enum Protocol { IPv4, ICMP, TCP, UDP };
+export enum Protocol { IPv4, ICMP, ARP, TCP, UDP };
 
 export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
     readonly protocol: Protocol;
@@ -20,7 +20,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
          */
     readonly action: Action; 
     readonly direction: Direction;
-    private readonly _matched: Set<[T, Ipv4Packet]> = new Set();
+    private readonly _matched: Set<[T, Ipv4Packet]> = new Set(); // this should probably be turned into a Queue (i.e. just use a list and use .shift() to pop)
     private _hits: number = 0;
 
     public constructor(protocol: Protocol, direction: Direction, check_function: (arg0: T, arg1: Ipv4Packet) => boolean, action: Action = Action.ACCEPT) {
