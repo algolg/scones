@@ -1,6 +1,6 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "../addressing.js";
 import { Device } from "../device.js";
-import { DisplayFrame, EtherType } from "../frame.js";
+import { DisplayFrame } from "../frame.js";
 import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../icmp.js";
 import { InfLayer, InfMatrix } from "../interface.js";
 import { Ipv4Packet } from "../ip.js";
@@ -98,24 +98,30 @@ const routeConfig = (routes: [string, Ipv4Address, Ipv4Address, number][]) => {
     `
 }
 
-const pingTool = () => `
-<div class="config-option">
-    <input id="ping-dropdown" class="option-dropdown" type="checkbox">
-    <label for="ping-dropdown" class="option-dropdown-label">Ping</label>
-    <div class="option-dropdown-contents">
-        <form id="execute-ping-form" class="option-form" onsubmit="executePing(this)">
-            <label for="dest-ipv4-address">Destination IPv4 Address</label>
-            <input name="dest-ipv4-address" class="mono" type="text" placeholder="A.B.C.D" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
-            <label for="ttl">TTL</label>
-            <input name="ttl" type="number" min="1", max="255", value="64"/>
-            <label for="count">Count</label>
-            <input name="count" type="number" min="1", max="255", value="4"/>
-            <button type="submit">Send</button>
-        </form>
-        <div id="ping-terminal" class="config-terminal dark-bg gap-above mono"></div>
+const pingTool = (device: Device) => {
+    const ping_terminal_lines = '<div>' + device.ping_terminal_lines.join('</div><div>') + '</div>';
+    return `
+    <div class="config-option">
+        <input id="ping-dropdown" class="option-dropdown" type="checkbox">
+        <label for="ping-dropdown" class="option-dropdown-label">Ping</label>
+        <div class="option-dropdown-contents">
+            <form id="execute-ping-form" class="option-form" onsubmit="executePing(this)">
+                <label for="dest-ipv4-address">Destination IPv4 Address</label>
+                <input name="dest-ipv4-address" class="mono" type="text" placeholder="A.B.C.D" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
+                <label for="ttl">TTL</label>
+                <input name="ttl" type="number" min="1", max="255", value="64"/>
+                <label for="count">Count</label>
+                <input name="count" type="number" min="1", max="255", value="4"/>
+                <button type="submit">Send</button>
+            </form>
+            <div id="ping-terminal-${device.getId().value}" class="config-terminal dark-bg gap-above mono">
+                ${ping_terminal_lines}
+            </div>
+        </div>
     </div>
-</div>
-`
+    `
+
+}
 
 const frameListing = (display_frame_set: DisplayFrame[], idx: number, frame_coords: [number, number][], frame_angle: number[], protocol: Protocol, explanation: string) => {
     let onchangeParam = [];
@@ -159,7 +165,7 @@ export function displayInfo(device: Device) {
         document.getElementById('add-route-form').addEventListener("submit", x => x.preventDefault());
 
         configurePanel.innerHTML += `<h2>Tools</h2>`;
-        configurePanel.innerHTML += pingTool();
+        configurePanel.innerHTML += pingTool(device);
         document.getElementById('execute-ping-form').addEventListener("submit", x => x.preventDefault());
     }
 }
@@ -389,13 +395,16 @@ function executePing(ele: HTMLButtonElement) {
         return;
     }
 
-    document.getElementById('ping-terminal').innerHTML = '';
-    focusedDevice.ping(dest_ipv4_address, count, ttl, displayPingResponse, displayPingError);
-
+    const device = focusedDevice;
+    device.clearPingTerminal();
+    refreshPingTerminal(device);
+    focusedDevice.ping(dest_ipv4_address, count, ttl,
+        (datagram: IcmpDatagram, packet: Ipv4Packet) => { displayPingResponse(device, datagram, packet); },
+        (error: string) => { displayPingError(device, error); },
+    );
 } (<any>window).executePing = executePing;
 
-function displayPingResponse(datagram: IcmpDatagram, packet: Ipv4Packet) {
-    const ping_terminal = document.getElementById('ping-terminal');
+function displayPingResponse(device: Device, datagram: IcmpDatagram, packet: Ipv4Packet) {
     let response: string;
     switch (datagram.type) {
         case (IcmpControlMessage.ECHO_REPLY):
@@ -422,11 +431,19 @@ function displayPingResponse(datagram: IcmpDatagram, packet: Ipv4Packet) {
     }
 
     if (response) {
-        ping_terminal.innerHTML += `<div>Received ${response} from ${packet.src}</div>`
+        device.pushPingLine(`Received ${response} from ${packet.src}`);
     }
+    refreshPingTerminal(device);
 }
 
-function displayPingError(error: string) {
-    const ping_terminal = document.getElementById('ping-terminal');
-    ping_terminal.innerHTML += `<div>${error}</div>`;
+function displayPingError(device: Device, error: string) {
+    device.pushPingLine(error);
+    refreshPingTerminal(device);
+}
+
+function refreshPingTerminal(device: Device) {
+    const ping_terminal = document.getElementById(`ping-terminal-${device.getId().value}`);
+    if (ping_terminal !== null) {
+        ping_terminal.innerHTML = '<div>' + device.ping_terminal_lines.join('</div><div>') + '</div>';
+    }
 }

@@ -26,6 +26,7 @@ export var DeviceType;
 ;
 export class Device {
     constructor(device_type) {
+        this._ping_terminal_lines = [];
         this._forwarding_table = new ForwardingInformationBase();
         this._arp_table = new ArpTable(); /* don't keep this public */
         this._routing_table = new RoutingTable();
@@ -96,6 +97,9 @@ export class Device {
         return this.DeviceList.find((dev) => Math.abs(dev.coords[0] * CANVAS_WIDTH() - x_coord) <= ICON_SIZE / 2 &&
             Math.abs(dev.coords[1] * CANVAS_HEIGHT() - y_coord) <= ICON_SIZE / 2);
     }
+    static getDeviceFromId(id) {
+        return this.DeviceList.itemFromId(new DeviceID(id));
+    }
     /**
      * Deletes a device from the topology
      * @param x_coord X-axis coordinate of the device to delete
@@ -133,6 +137,9 @@ export class Device {
     static get numOfDevices() {
         return this.DeviceList.length;
     }
+    get ping_terminal_lines() {
+        return this._ping_terminal_lines;
+    }
     get l2infs() {
         return this._l2infs;
     }
@@ -144,6 +151,12 @@ export class Device {
     }
     compare(other) {
         return this._id.compare(other._id);
+    }
+    pushPingLine(line) {
+        this._ping_terminal_lines.push(line);
+    }
+    clearPingTerminal() {
+        this._ping_terminal_lines = [];
     }
     clearFib(mac) {
         if (!this.hasInfWithMac(mac)) {

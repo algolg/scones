@@ -19,6 +19,7 @@ export enum DeviceType { PC, SERVER, ROUTER, SWITCH };
 
 export abstract class Device implements IdentifiedItem {
     private readonly _id: DeviceID;
+    private _ping_terminal_lines: string[] = [];
     private _forwarding_table: ForwardingInformationBase = new ForwardingInformationBase();
     protected _arp_table: ArpTable = new ArpTable(); /* don't keep this public */
     protected _routing_table: RoutingTable = new RoutingTable();
@@ -107,6 +108,10 @@ export abstract class Device implements IdentifiedItem {
         );
     }
 
+    public static getDeviceFromId(id: number): Device {
+        return this.DeviceList.itemFromId(new DeviceID(id));
+    }
+
     /**
      * Deletes a device from the topology
      * @param x_coord X-axis coordinate of the device to delete
@@ -147,6 +152,10 @@ export abstract class Device implements IdentifiedItem {
         return this.DeviceList.length;
     }
 
+    public get ping_terminal_lines(): Readonly<string[]> {
+        return this._ping_terminal_lines;
+    }
+
     public get l2infs(): L2Interface[] {
         return this._l2infs;
     }
@@ -161,6 +170,13 @@ export abstract class Device implements IdentifiedItem {
 
     public compare(other: this): number {
         return this._id.compare(other._id);
+    }
+
+    public pushPingLine(line: string) {
+        this._ping_terminal_lines.push(line);
+    }
+    public clearPingTerminal() {
+        this._ping_terminal_lines = [];
     }
 
     public clearFib(mac: MacAddress) {
