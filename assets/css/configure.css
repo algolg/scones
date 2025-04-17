@@ -20,6 +20,18 @@
     margin: 0.25em 0.3em;
 }
 
+#configure-panel h3 {
+    margin: 0.5em 0.3em 0.25em;
+}
+#configure-panel h3::before {
+    color: var(--bg-dark);
+    content: '- '
+}
+#configure-panel h3::after {
+    color: var(--bg-dark);
+    content: ' -'
+}
+
 .config-option {
     position: relative;
     border-radius: 3px;
@@ -129,4 +141,52 @@
     overflow-y: scroll;
     text-wrap: wrap;
     word-wrap: break-word;
+}
+
+.packet-type {
+    font-weight: 600;
+}
+.packet-from::before {
+    content: 'From: ';
+    display: inline-block;
+    width: 3em;
+}
+.packet-to::before {
+    content: 'To: ';
+    display: inline-block;
+    width: 3em;
+}
+.packet-description {
+    border-top: 2px dashed var(--bg-black);
+    padding: 2px 3px;
+    margin-top: 5px;
+}
+
+.packet-extra-info {
+    margin-top: 3px;
+}
+.packet-field-ttl::before {
+    content: 'TTL: ';
+    display: inline-block;
+    width: 3em;
+}
+
+.arp-label {
+    color: #fff125;
+}
+.icmp-label {
+    color: #3d3dee;
+}
+
+#frame-selectors {
+    margin: 0.25em 0.3em;
+}
+
+.arp-frame,
+.icmp-frame {
+    display: none;
+}
+#frame-selectors:has(> #arp-select:checked) ~ .arp-frame,
+#frame-selectors:has(> #icmp-select:checked) ~ .icmp-frame {
+    display: block;
 }

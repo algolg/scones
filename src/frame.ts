@@ -1,16 +1,16 @@
 import { MacAddress, spread } from "./addressing.js";
 
-export enum EtherType { IPv4 = 0x0800, ARP = 0x0806, IPv6 = 0x86DD };
+export enum EtherType { IEEE802dot3_Upper = 0x05dc, IPv4 = 0x0800, ARP = 0x0806, IPv6 = 0x86DD };
 
 export class Frame {
     private readonly _dest_mac: MacAddress;
     private readonly _src_mac: MacAddress;
-    private readonly _ethertype: EtherType;
+    private readonly _ethertype: number;
     private readonly _packet: Uint8Array;
     private readonly _fcs: Uint8Array;
     private readonly _frame: Uint8Array;
 
-    public constructor(dest_mac: MacAddress, src_mac: MacAddress, ethertype: EtherType, packet: Uint8Array) {
+    public constructor(dest_mac: MacAddress, src_mac: MacAddress, ethertype: number, packet: Uint8Array) {
         this._dest_mac = dest_mac;
         this._src_mac = src_mac;
         this._ethertype = ethertype;
@@ -39,7 +39,7 @@ export class Frame {
         return this._src_mac;
     }
 
-    public get ethertype(): Readonly<EtherType> {
+    public get ethertype(): number {
         return this._ethertype
     }
 
@@ -58,5 +58,17 @@ export class Frame {
 
     public printFrame() {
         console.log(this._frame.toHex());
+    }
+}
+
+export class DisplayFrame {
+    readonly frame: Frame;
+    readonly egress_mac: MacAddress;
+    readonly sender_coords: () => [number, number]
+
+    constructor(frame: Frame, egress_mac: MacAddress, sender_coords: () => [number, number]) {
+        this.frame = frame;
+        this.egress_mac = egress_mac;
+        this.sender_coords = sender_coords;
     }
 }
