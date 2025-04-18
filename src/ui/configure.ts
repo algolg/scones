@@ -400,7 +400,7 @@ function executePing(ele: HTMLButtonElement) {
     refreshPingTerminal(device);
     focusedDevice.ping(dest_ipv4_address, count, ttl,
         (datagram: IcmpDatagram, packet: Ipv4Packet) => { displayPingResponse(device, datagram, packet); },
-        (error: string) => { displayPingError(device, error); },
+        (error: string) => { displayPingError(device, error); }
     );
 } (<any>window).executePing = executePing;
 
