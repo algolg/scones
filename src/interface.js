@@ -1,5 +1,5 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing.js";
-import { ArpPacket, OP } from "./arp.js";
+import { ArpPacket, OP } from "./protocols/arp.js";
 import { DisplayFrame, EtherType, Frame } from "./frame.js";
 import { RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
 var InfStatus;

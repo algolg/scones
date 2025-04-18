@@ -1,9 +1,9 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "../addressing.js";
 import { Device } from "../device.js";
 import { DisplayFrame } from "../frame.js";
-import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../icmp.js";
+import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InfLayer, InfMatrix } from "../interface.js";
-import { Ipv4Packet } from "../ip.js";
+import { Ipv4Packet } from "../protocols/ip.js";
 import { Protocol } from "../socket.js";
 import { getExplanation } from "./explain.js";
 import { focusedDevice } from "./topology.js";

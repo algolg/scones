@@ -1,5 +1,5 @@
 import { Ipv4Address, Ipv4Prefix } from "../addressing.js";
-import { IcmpControlMessage, IcmpUnreachableCode } from "../icmp.js";
+import { IcmpControlMessage, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InfLayer, InfMatrix } from "../interface.js";
 import { Protocol } from "../socket.js";
 import { getExplanation } from "./explain.js";

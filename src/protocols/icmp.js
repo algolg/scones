@@ -1,4 +1,4 @@
-import { concat, divide, limit, padTo32BitWords, spread } from "./addressing.js";
+import { concat, divide, limit, padTo32BitWords, spread } from "../addressing.js";
 import { Ipv4Packet } from "./ip.js";
 export var IcmpControlMessage;
 (function (IcmpControlMessage) {

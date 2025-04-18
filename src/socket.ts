@@ -1,5 +1,5 @@
-import { IcmpDatagram } from "./icmp.js";
-import { Ipv4Packet } from "./ip.js";
+import { IcmpDatagram } from "./protocols/icmp.js";
+import { Ipv4Packet } from "./protocols/ip.js";
 
 export enum Action { BLOCK, ACCEPT, SEND/*?*/ };
 export enum Direction { EITHER, IN, OUT };

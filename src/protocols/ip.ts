@@ -1,5 +1,5 @@
-import { Ipv4Address, concat, divide, limit, padTo32BitWords, spread } from "./addressing.js";
-import { Packet } from "./packet.js";
+import { Ipv4Address, concat, divide, limit, padTo32BitWords, spread } from "../addressing.js";
+import { Packet } from "../packet.js";
 
 // RFC 790
 export enum InternetProtocolNumbers { ICMP = 1, TCP = 6, UDP = 17 };
@@ -71,7 +71,7 @@ export class Ipv4Packet implements Packet {
     }
 
     public static calculateChecksum(header_without_checksum: Uint8Array): number {
-        let words = divide(header_without_checksum, Array<number>(10).fill(16));
+        let words = divide(header_without_checksum, Array<number>(header_without_checksum.length / 2).fill(16));
         let sum = 0;
         for (let word of words) {
             sum += word;

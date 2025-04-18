@@ -1,4 +1,4 @@
-import { Ipv4Address, concat, divide, limit, padTo32BitWords, spread } from "./addressing.js";
+import { Ipv4Address, concat, divide, limit, padTo32BitWords, spread } from "../addressing.js";
 // RFC 790
 export var InternetProtocolNumbers;
 (function (InternetProtocolNumbers) {
@@ -43,7 +43,7 @@ export class Ipv4Packet {
         return (~num >>> 0) & 0xFFFF;
     }
     static calculateChecksum(header_without_checksum) {
-        let words = divide(header_without_checksum, Array(10).fill(16));
+        let words = divide(header_without_checksum, Array(header_without_checksum.length / 2).fill(16));
         let sum = 0;
         for (let word of words) {
             sum += word;

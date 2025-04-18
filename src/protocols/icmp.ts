@@ -1,4 +1,4 @@
-import { concat, divide, limit, padTo32BitWords, spread } from "./addressing.js";
+import { concat, divide, limit, padTo32BitWords, spread } from "../addressing.js";
 import { Ipv4Packet } from "./ip.js";
 
 export enum IcmpControlMessage { ECHO_REPLY = 0, UNREACHABLE = 3, ECHO_REQUEST = 8, TIME_EXCEEDED = 11 }

@@ -1,13 +1,14 @@
 import { Ipv4Address, DeviceID, MacAddress, Ipv4Prefix } from "./addressing.js";
-import { ArpPacket, ArpTable, OP } from "./arp.js";
+import { ArpPacket, ArpTable, OP } from "./protocols/arp.js";
 import { ForwardingInformationBase } from "./forwarding.js";
 import { DisplayFrame, EtherType, Frame } from "./frame.js";
-import { IcmpControlMessage, IcmpDatagram } from "./icmp.js";
+import { IcmpControlMessage, IcmpDatagram } from "./protocols/icmp.js";
 import { IdentifiedList, InfMatrix, L2Interface, L3Interface, VirtualL3Interface } from "./interface.js";
-import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
+import { InternetProtocolNumbers, Ipv4Packet } from "./protocols/ip.js";
 import { RoutingTable } from "./routing.js";
 import { Socket, SocketTable } from "./socket.js";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, ICON_SIZE, RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
+import { UdpDatagram } from "./protocols/udp.js";
 var IpResponse;
 (function (IpResponse) {
     IpResponse[IpResponse["SENT"] = 0] = "SENT";
@@ -438,17 +439,22 @@ export class Device {
                 case InternetProtocolNumbers.ICMP:
                     const icmp_datagram = IcmpDatagram.parse(ipv4_packet.data);
                     if (IcmpDatagram.verifyChecksum(icmp_datagram)) {
-                        console.log("ICMP checksum verification succeeded!");
                         this.processICMP(icmp_datagram, ipv4_packet);
                         return true;
-                    }
-                    else {
-                        console.log("ICMP checksum verification failed!");
                     }
                     break;
                 case InternetProtocolNumbers.TCP:
                     break;
                 case InternetProtocolNumbers.UDP:
+                    const udp_datagram = UdpDatagram.parse(ipv4_packet.data, ipv4_packet.src, ipv4_packet.dest);
+                    if (UdpDatagram.verifyChecksum(udp_datagram, ipv4_packet.src, ipv4_packet.dest)) {
+                        console.log("UDP checksum verification succeeded!");
+                        this;
+                        return true;
+                    }
+                    else {
+                        console.log("UDP checksum verification failed!");
+                    }
                     break;
             }
         }
@@ -480,6 +486,9 @@ export class Device {
                 console.log(`!! ICMP Reply Received! (there are ${this._sockets.getIcmpSockets().size} sockets)`);
                 return false;
         }
+        return false;
+    }
+    async processUDP(udp_datagram, ipv4_packet) {
         return false;
     }
     logPing(datagram, packet) {
