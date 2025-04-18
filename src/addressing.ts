@@ -310,6 +310,14 @@ export class Ipv4Address implements GeneralIpAddress {
     public static get byteLength(): number {
         return 4;
     }
+    
+    public static get broadcast(): Ipv4Address {
+        return new Ipv4Address([255, 255, 255, 255]);
+    }
+
+    public isBroadcast(): boolean {
+        return this.compare(Ipv4Address.broadcast) == 0;
+    }
 
     public toBinary(): string {
         // return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");

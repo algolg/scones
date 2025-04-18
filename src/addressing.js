@@ -251,6 +251,12 @@ export class Ipv4Address {
     static get byteLength() {
         return 4;
     }
+    static get broadcast() {
+        return new Ipv4Address([255, 255, 255, 255]);
+    }
+    isBroadcast() {
+        return this.compare(Ipv4Address.broadcast) == 0;
+    }
     toBinary() {
         // return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");
         return this._value.toBinary();

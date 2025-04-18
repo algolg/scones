@@ -433,7 +433,7 @@ export class Device {
     }
     async processIpv4(ipv4_packet, ingress_mac) {
         // RFC 1812 5.2.1 may be used as a guide
-        if (this.hasInfWithIpv4(ipv4_packet.dest)) {
+        if (ipv4_packet.dest.isBroadcast() || this.hasInfWithIpv4(ipv4_packet.dest)) {
             switch (ipv4_packet.protocol) {
                 case InternetProtocolNumbers.ICMP:
                     const icmp_datagram = IcmpDatagram.parse(ipv4_packet.data);
