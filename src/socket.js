@@ -24,7 +24,7 @@ export var Protocol;
 export class Socket {
     constructor(protocol, direction, check_function, action = Action.ACCEPT) {
         this._createResponse = (packet) => undefined;
-        this._matched = new Set(); // this should probably be turned into a Queue (i.e. just use a list and use .shift() to pop)
+        this._matched = [];
         this._hits = 0;
         this.protocol = protocol;
         this.direction = direction;
@@ -36,17 +36,15 @@ export class Socket {
     }
     check(protocol_data, packet) {
         if (this._check(protocol_data, packet)) {
-            this._matched.add([protocol_data, packet]);
+            this._matched.push([protocol_data, packet]);
             this._hits++;
             return true;
         }
         return false;
     }
     get matched_top() {
-        if (this._matched.size > 0) {
-            const ele = this._matched.values().next().value;
-            this._matched.delete(ele);
-            return ele;
+        if (this._matched.length > 0) {
+            return this._matched.shift();
         }
         else {
             return undefined;
@@ -68,6 +66,7 @@ export class SocketTable {
     constructor() {
         this._ipv4_sockets = new Set();
         this._icmp_sockets = new Set();
+        this._udp_sockets = new Set();
         // and the others
     }
     // and the others
@@ -77,17 +76,26 @@ export class SocketTable {
     addIcmpSocket(socket) {
         this._icmp_sockets.add(socket);
     }
+    addUdpSocket(socket) {
+        this._udp_sockets.add(socket);
+    }
     getIpv4Sockets() {
         return this._ipv4_sockets;
     }
     getIcmpSockets() {
         return this._icmp_sockets;
     }
+    getUdpSockets() {
+        return this._udp_sockets;
+    }
     deleteIpv4Socket(socket) {
         this._ipv4_sockets.delete(socket);
     }
     deleteIcmpSocket(socket) {
         this._icmp_sockets.delete(socket);
+    }
+    deleteUdpSocket(socket) {
+        this._udp_sockets.delete(socket);
     }
 }
 //# sourceMappingURL=socket.js.map

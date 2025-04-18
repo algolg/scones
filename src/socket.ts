@@ -1,11 +1,12 @@
 import { IcmpDatagram } from "./protocols/icmp.js";
 import { Ipv4Packet } from "./protocols/ip.js";
+import { UdpDatagram } from "./protocols/udp.js";
 
 export enum Action { BLOCK, ACCEPT, SEND/*?*/ };
 export enum Direction { EITHER, IN, OUT };
 export enum Protocol { IPv4, ICMP, ARP, TCP, UDP };
 
-export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
+export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the others */> {
     readonly protocol: Protocol;
     private readonly _check: (protocol_data: T, packet: Ipv4Packet) => boolean;
     private readonly _createResponse: (packet: Ipv4Packet) => Ipv4Packet = (packet) => undefined;
@@ -20,7 +21,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
          */
     readonly action: Action; 
     readonly direction: Direction;
-    private readonly _matched: Set<[T, Ipv4Packet]> = new Set(); // this should probably be turned into a Queue (i.e. just use a list and use .shift() to pop)
+    private readonly _matched: [T, Ipv4Packet][] = [];
     private _hits: number = 0;
 
     public constructor(protocol: Protocol, direction: Direction, check_function: (arg0: T, arg1: Ipv4Packet) => boolean, action: Action = Action.ACCEPT) {
@@ -36,7 +37,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
 
     public check(protocol_data: T, packet: Ipv4Packet): boolean {
         if (this._check(protocol_data, packet)) {
-            this._matched.add([protocol_data, packet]);
+            this._matched.push([protocol_data, packet]);
             this._hits++;
             return true;
         }
@@ -44,10 +45,8 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
     }
 
     public get matched_top(): [T, Ipv4Packet] {
-        if (this._matched.size > 0) {
-            const ele: [T, Ipv4Packet] = this._matched.values().next().value;
-            this._matched.delete(ele);
-            return ele;
+        if (this._matched.length > 0) {
+            return this._matched.shift();
         }
         else {
             return undefined;
@@ -80,6 +79,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram /* and the others */> {
 export class SocketTable {
     private _ipv4_sockets: Set<Socket<Ipv4Packet>> = new Set();
     private _icmp_sockets: Set<Socket<IcmpDatagram>> = new Set();
+    private _udp_sockets: Set<Socket<UdpDatagram>> = new Set();
     // and the others
     
     public addIpv4Socket(socket: Socket<Ipv4Packet>) {
@@ -88,6 +88,10 @@ export class SocketTable {
     
     public addIcmpSocket(socket: Socket<IcmpDatagram>) {
         this._icmp_sockets.add(socket);
+    }
+    
+    public addUdpSocket(socket: Socket<UdpDatagram>) {
+        this._udp_sockets.add(socket);
     }
 
     public getIpv4Sockets(): Set<Socket<Ipv4Packet>> {
@@ -98,12 +102,20 @@ export class SocketTable {
         return this._icmp_sockets;
     }
 
+    public getUdpSockets(): Set<Socket<UdpDatagram>> {
+        return this._udp_sockets;
+    }
+
     public deleteIpv4Socket(socket: Socket<Ipv4Packet>) {
         this._ipv4_sockets.delete(socket);
     }
 
     public deleteIcmpSocket(socket: Socket<IcmpDatagram>) {
         this._icmp_sockets.delete(socket);
+    }
+
+    public deleteUdpSocket(socket: Socket<UdpDatagram>) {
+        this._udp_sockets.delete(socket);
     }
     // and the others
 }

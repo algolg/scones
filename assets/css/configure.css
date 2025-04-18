@@ -177,6 +177,9 @@
 .icmp-label {
     color: #3d3dee;
 }
+.udp-label {
+    color: #ff6a25;
+}
 
 #frame-selectors {
     margin: 0.25em 0.3em;

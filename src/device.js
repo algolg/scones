@@ -449,7 +449,7 @@ export class Device {
                     const udp_datagram = UdpDatagram.parse(ipv4_packet.data, ipv4_packet.src, ipv4_packet.dest);
                     if (UdpDatagram.verifyChecksum(udp_datagram, ipv4_packet.src, ipv4_packet.dest)) {
                         console.log("UDP checksum verification succeeded!");
-                        this;
+                        this.processUDP(udp_datagram, ipv4_packet);
                         return true;
                     }
                     else {
@@ -489,6 +489,14 @@ export class Device {
         return false;
     }
     async processUDP(udp_datagram, ipv4_packet) {
+        for (let udp_socket of this._sockets.getUdpSockets()) {
+            const matched = udp_socket.check(udp_datagram, ipv4_packet);
+            console.log(`---------- checking socket: ${matched} ----------`);
+            // one packet can only match one socket
+            if (matched) {
+                break;
+            }
+        }
         return false;
     }
     logPing(datagram, packet) {
@@ -561,9 +569,15 @@ export class Device {
                         console.log(`---------- socket ${seq_num} deleted ---------`);
                         if (datagram_received) {
                             let end = performance.now();
-                            const [datagram, packet] = ping_socket.matched_top;
-                            console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
-                            resolve([datagram, packet]);
+                            const top = ping_socket.matched_top;
+                            if (top !== undefined) {
+                                const [datagram, packet] = top;
+                                console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
+                                resolve([datagram, packet]);
+                            }
+                            else {
+                                resolve(undefined);
+                            }
                             return;
                         }
                         else if (timed_out) {
