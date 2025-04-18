@@ -22,9 +22,9 @@ export class IdentifiedList extends Array {
      * @returns The index of the IdentifiedItem in the sorted list
      */
     push(item) {
-        super.push(item);
-        super.sort((a, b) => a.compare(b));
-        return super.indexOf(item);
+        const idx = this.anticipatedIndexOfId(item.getId());
+        super.splice(idx, 0, item);
+        return idx;
     }
     /**
      * Deletes an IdentifiedItem
@@ -80,6 +80,34 @@ export class IdentifiedList extends Array {
         }
         return -1;
     }
+    anticipatedIndexOfId(id) {
+        if (this.length == 0) {
+            return 0;
+        }
+        let start = 0;
+        let end = this.length - 1;
+        if (id.compare(this[end].getId()) > 0) {
+            return this.length;
+        }
+        while (start <= end) {
+            const mid = Math.trunc((start + end) / 2);
+            const comparison = id.compare(this[mid].getId());
+            if (comparison > 0) {
+                start = mid + 1;
+            }
+            else if (comparison < 0) {
+                end = mid - 1;
+            }
+            else {
+                return mid;
+            }
+        }
+        const out = (end + start + 1) / 2;
+        if (out < 0) {
+            return this.length - 1;
+        }
+        return out;
+    }
     existsId(id) {
         return this.indexOfId(id) != -1;
     }
@@ -107,14 +135,13 @@ class InterfaceMatrix {
     push(inf) {
         const idx = this._list.push(inf);
         const len = this._list.length;
-        let new_matrix = Array.from({ length: len }, () => Array(len).fill(0));
-        for (var i = 0; i < idx; i++) {
-            new_matrix[i] = this._matrix[i].slice(0, idx).concat(0, this._matrix[i].slice(idx));
+        this._matrix.splice(idx, 0, Array(len).fill(0));
+        for (const [key, row] of this._matrix.entries()) {
+            if (key == idx) {
+                continue;
+            }
+            row.splice(idx, 0, 0);
         }
-        for (; i < len - 1; i++) {
-            new_matrix[i + 1] = this._matrix[i].slice(0, idx).concat(0, this._matrix[i].slice(idx));
-        }
-        this._matrix = new_matrix;
     }
     delete(inf) {
         const idx = this._list.delete(inf);
@@ -374,7 +401,7 @@ export class L2Interface extends Interface {
 }
 export class L3Interface extends Interface {
     // private _ipv6: Ipv6Address; this won't work yet
-    constructor(network_controller, num, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 0, mac, tracked = true) {
+    constructor(network_controller, num, ipv4_arr = [0, 0, 0, 0], ipv4_prefix = 32, mac, tracked = true) {
         super(network_controller, InfLayer.L3, num, mac, tracked);
         this._ipv4 = new Ipv4Address(ipv4_arr);
         this._ipv4_prefix = new Ipv4Prefix(ipv4_prefix);

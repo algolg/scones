@@ -26,6 +26,7 @@ export var DeviceType;
 ;
 export class Device {
     constructor(device_type) {
+        this._ping_terminal_lines = [];
         this._forwarding_table = new ForwardingInformationBase();
         this._arp_table = new ArpTable(); /* don't keep this public */
         this._routing_table = new RoutingTable();
@@ -96,6 +97,9 @@ export class Device {
         return this.DeviceList.find((dev) => Math.abs(dev.coords[0] * CANVAS_WIDTH() - x_coord) <= ICON_SIZE / 2 &&
             Math.abs(dev.coords[1] * CANVAS_HEIGHT() - y_coord) <= ICON_SIZE / 2);
     }
+    static getDeviceFromId(id) {
+        return this.DeviceList.itemFromId(new DeviceID(id));
+    }
     /**
      * Deletes a device from the topology
      * @param x_coord X-axis coordinate of the device to delete
@@ -133,6 +137,9 @@ export class Device {
     static get numOfDevices() {
         return this.DeviceList.length;
     }
+    get ping_terminal_lines() {
+        return this._ping_terminal_lines;
+    }
     get l2infs() {
         return this._l2infs;
     }
@@ -144,6 +151,12 @@ export class Device {
     }
     compare(other) {
         return this._id.compare(other._id);
+    }
+    pushPingLine(line) {
+        this._ping_terminal_lines.push(line);
+    }
+    clearPingTerminal() {
+        this._ping_terminal_lines = [];
     }
     clearFib(mac) {
         if (!this.hasInfWithMac(mac)) {
@@ -477,42 +490,38 @@ export class Device {
     logError(error) {
         console.log(error);
     }
-    async ping(dest_ipv4, count = Number.MAX_VALUE, ttl = 255, success_func = this.logPing, error_func = this.logError) {
+    ping(dest_ipv4, count = Number.MAX_VALUE, ttl = 255, success_func = this.logPing, error_func = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
         let hits = 0;
         let echo_num = 1;
-        const response = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-        if (response !== undefined) {
-            if (response[0].isEchoReply) {
-                hits++;
+        (async function processEcho(device) {
+            let id_str = device._env.get('PING_SEQ');
+            if (id_str !== undefined && parseInt(id_str) != id) {
+                return;
             }
-            success_func(response[0], response[1]);
-        }
-        else {
-            console.log(`Request timed out (${echo_num})`);
-            error_func(`Request timed out (${echo_num})`);
-        }
-        const interval = setInterval(async () => {
+            const start = performance.now();
+            const response = await device.icmpEcho(dest_ipv4, id, echo_num++, ttl);
+            const end = performance.now();
+            if (response !== undefined) {
+                if (response[0].isEchoReply) {
+                    hits++;
+                }
+                success_func(response[0], response[1]);
+            }
+            else {
+                console.log(`Request timed out`);
+                error_func(`Request timed out`);
+            }
             if (echo_num <= count) {
-                const response = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-                if (response !== undefined) {
-                    if (response[0].isEchoReply) {
-                        hits++;
-                    }
-                    success_func(response[0], response[1]);
-                }
-                else {
-                    console.log(`Request timed out (${echo_num})`);
-                    error_func(`Request timed out (${echo_num})`);
-                }
+                const wait_time = 1000 - (end - start);
+                setTimeout(async () => await processEcho(device), Math.max(wait_time, 0));
             }
             else {
                 console.log(`${hits}/${count}`);
                 error_func(`${count} pings transmitted, ${hits} received`);
-                clearInterval(interval);
             }
-        }, 1000);
+        })(this);
     }
     /**
      * Sends an ICMP Echo and looks for a response

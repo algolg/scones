@@ -19,6 +19,7 @@ export enum DeviceType { PC, SERVER, ROUTER, SWITCH };
 
 export abstract class Device implements IdentifiedItem {
     private readonly _id: DeviceID;
+    private _ping_terminal_lines: string[] = [];
     private _forwarding_table: ForwardingInformationBase = new ForwardingInformationBase();
     protected _arp_table: ArpTable = new ArpTable(); /* don't keep this public */
     protected _routing_table: RoutingTable = new RoutingTable();
@@ -107,6 +108,10 @@ export abstract class Device implements IdentifiedItem {
         );
     }
 
+    public static getDeviceFromId(id: number): Device {
+        return this.DeviceList.itemFromId(new DeviceID(id));
+    }
+
     /**
      * Deletes a device from the topology
      * @param x_coord X-axis coordinate of the device to delete
@@ -147,6 +152,10 @@ export abstract class Device implements IdentifiedItem {
         return this.DeviceList.length;
     }
 
+    public get ping_terminal_lines(): Readonly<string[]> {
+        return this._ping_terminal_lines;
+    }
+
     public get l2infs(): L2Interface[] {
         return this._l2infs;
     }
@@ -161,6 +170,13 @@ export abstract class Device implements IdentifiedItem {
 
     public compare(other: this): number {
         return this._id.compare(other._id);
+    }
+
+    public pushPingLine(line: string) {
+        this._ping_terminal_lines.push(line);
+    }
+    public clearPingTerminal() {
+        this._ping_terminal_lines = [];
     }
 
     public clearFib(mac: MacAddress) {
@@ -534,44 +550,41 @@ export abstract class Device implements IdentifiedItem {
         console.log(error)
     }
 
-    public async ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255, success_func: (IcmpDatagram, Ipv4Packet) => void = this.logPing, error_func: (string) => void = this.logError) {
+    public ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255, success_func: (IcmpDatagram, Ipv4Packet) => void = this.logPing, error_func: (string) => void = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
         
         let hits = 0;
         let echo_num = 1;
 
-        const response: [IcmpDatagram, Ipv4Packet] = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-        if (response !== undefined) {
-            if (response[0].isEchoReply) {
-                hits++
+        (async function processEcho(device: Device) {
+            let id_str = device._env.get('PING_SEQ');
+            if (id_str !== undefined && parseInt(id_str) != id) {
+                return;
             }
-            success_func(response[0], response[1]);
-        }
-        else {
-            console.log(`Request timed out (${echo_num})`);
-            error_func(`Request timed out (${echo_num})`);
-        }
-        const interval = setInterval(async () => {
+            const start = performance.now();
+            const response: [IcmpDatagram, Ipv4Packet] = await device.icmpEcho(dest_ipv4, id, echo_num++, ttl);
+            const end = performance.now();
+            if (response !== undefined) {
+                if (response[0].isEchoReply) {
+                    hits++;
+                }
+                success_func(response[0], response[1]);
+            }
+            else {
+                console.log(`Request timed out`);
+                error_func(`Request timed out`);
+            }
+
             if (echo_num <= count) {
-                const response: [IcmpDatagram, Ipv4Packet] = await this.icmpEcho(dest_ipv4, id, echo_num++, ttl);
-                if (response !== undefined) {
-                    if (response[0].isEchoReply) {
-                        hits++;
-                    }
-                    success_func(response[0], response[1]);
-                }
-                else {
-                    console.log(`Request timed out (${echo_num})`);
-                    error_func(`Request timed out (${echo_num})`);
-                }
+                const wait_time: number = 1000 - (end-start);
+                setTimeout(async () => await processEcho(device), Math.max(wait_time, 0));
             }
             else {
                 console.log(`${hits}/${count}`)
                 error_func(`${count} pings transmitted, ${hits} received`);
-                clearInterval(interval);
             }
-        }, 1000);
+        })(this);
     }
 
     /**
