@@ -6,6 +6,8 @@ export enum Action { BLOCK, ACCEPT, SEND/*?*/ };
 export enum Direction { EITHER, IN, OUT };
 export enum Protocol { IPv4, ICMP, ARP, TCP, UDP };
 
+const POLLING_INTERVAL = 100;
+
 export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the others */> {
     readonly protocol: Protocol;
     private readonly _check: (protocol_data: T, packet: Ipv4Packet) => boolean;
@@ -33,6 +35,30 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
 
     public get hits(): number {
         return this._hits;
+    }
+
+    public async receive(timeout_ms?: number): Promise<[T, Ipv4Packet]> {
+        return new Promise((resolve) => {
+            const start = performance.now();
+            let num_matched = this._matched.length;
+
+            const interval = setInterval(() => {
+                const data_received = this._matched.length > num_matched;
+                const timed_out = timeout_ms ? (performance.now() - start) >= timeout_ms - POLLING_INTERVAL : false;
+                
+                if (data_received || timed_out) {
+                    clearInterval(interval);
+                }
+                if (data_received) {
+                    resolve(this.matched_top);
+                }
+                else if (timed_out) {
+                    resolve(undefined);
+                }
+
+                num_matched = this._matched.length;
+            }, POLLING_INTERVAL);
+        });
     }
 
     public check(protocol_data: T, packet: Ipv4Packet): boolean {

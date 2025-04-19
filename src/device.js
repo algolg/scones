@@ -549,49 +549,17 @@ export class Device {
      * @returns If a response was given, the control message of the response. Otherwise, undefined.
      */
     async icmpEcho(dest_ipv4, id = 1, seq_num = 1, ttl = 255) {
-        return new Promise((resolve) => {
-            if (this.hasL3Infs()) {
-                const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
-                const packet = new Ipv4Packet(0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram);
-                this.tryEncapsulateAndSend(packet);
-                let start = performance.now();
-                const ping_socket = Socket.icmpSocketFrom(icmp_request, packet);
-                this._sockets.addIcmpSocket(ping_socket);
-                console.log(`----------- socket ${seq_num} added ----------`);
-                let i = 0;
-                const interval_length = 100;
-                const interval = setInterval(() => {
-                    const datagram_received = ping_socket.hits > 0;
-                    const timed_out = i >= 1000 / interval_length - 1;
-                    if (datagram_received || timed_out) {
-                        this._sockets.deleteIcmpSocket(ping_socket);
-                        clearInterval(interval);
-                        console.log(`---------- socket ${seq_num} deleted ---------`);
-                        if (datagram_received) {
-                            let end = performance.now();
-                            const top = ping_socket.matched_top;
-                            if (top !== undefined) {
-                                const [datagram, packet] = top;
-                                console.log(`received ICMP ${IcmpControlMessage[datagram.type]} in ${end - start}`);
-                                resolve([datagram, packet]);
-                            }
-                            else {
-                                resolve(undefined);
-                            }
-                            return;
-                        }
-                        else if (timed_out) {
-                            resolve(undefined);
-                            return;
-                        }
-                    }
-                    i++;
-                }, interval_length);
-            }
-            else {
-                resolve(undefined);
-            }
-        });
+        if (this.hasL3Infs()) {
+            const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
+            const packet = new Ipv4Packet(0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram);
+            this.tryEncapsulateAndSend(packet);
+            const ping_socket = Socket.icmpSocketFrom(icmp_request, packet);
+            this._sockets.addIcmpSocket(ping_socket);
+            const top = await ping_socket.receive(1000);
+            this._sockets.deleteIcmpSocket(ping_socket);
+            return top;
+        }
+        return undefined;
     }
 }
 Device.DeviceList = new IdentifiedList();

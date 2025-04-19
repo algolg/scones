@@ -21,6 +21,7 @@ export var Protocol;
     Protocol[Protocol["UDP"] = 4] = "UDP";
 })(Protocol || (Protocol = {}));
 ;
+const POLLING_INTERVAL = 100;
 export class Socket {
     constructor(protocol, direction, check_function, action = Action.ACCEPT) {
         this._createResponse = (packet) => undefined;
@@ -33,6 +34,26 @@ export class Socket {
     }
     get hits() {
         return this._hits;
+    }
+    async receive(timeout_ms) {
+        return new Promise((resolve) => {
+            const start = performance.now();
+            let num_matched = this._matched.length;
+            const interval = setInterval(() => {
+                const data_received = this._matched.length > num_matched;
+                const timed_out = timeout_ms ? (performance.now() - start) >= timeout_ms - POLLING_INTERVAL : false;
+                if (data_received || timed_out) {
+                    clearInterval(interval);
+                }
+                if (data_received) {
+                    resolve(this.matched_top);
+                }
+                else if (timed_out) {
+                    resolve(undefined);
+                }
+                num_matched = this._matched.length;
+            }, POLLING_INTERVAL);
+        });
     }
     check(protocol_data, packet) {
         if (this._check(protocol_data, packet)) {
