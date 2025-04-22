@@ -3,7 +3,7 @@ import { EtherType } from "../frame.js";
 import { L3Interface } from "../interface.js";
 import { Packet } from "../packet.js";
 
-enum HTYPE { ETHERNET = 1 }
+export enum HTYPE { ETHERNET = 1 }
 // enum PTYPE { IPv4 = 0x0800 }
 export enum OP { REQUEST = 1, REPLY };
 

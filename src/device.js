@@ -9,6 +9,7 @@ import { RoutingTable } from "./routing.js";
 import { Socket, SocketTable } from "./socket.js";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, ICON_SIZE, RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
 import { UdpDatagram } from "./protocols/udp.js";
+import { DhcpClient, DhcpServer } from "./protocols/dhcp.js";
 var IpResponse;
 (function (IpResponse) {
     IpResponse[IpResponse["SENT"] = 0] = "SENT";
@@ -29,7 +30,7 @@ export class Device {
     constructor(device_type) {
         this._ping_terminal_lines = [];
         this._forwarding_table = new ForwardingInformationBase();
-        this._arp_table = new ArpTable(); /* don't keep this public */
+        this._arp_table = new ArpTable();
         this._routing_table = new RoutingTable();
         this._network_controller = new NetworkController(this);
         this._env = new Map();
@@ -49,6 +50,18 @@ export class Device {
                 Device.DeviceList.push(this);
             }
         }
+        this._lib = new Libraries(() => this._l3infs.map((inf) => [inf.ipv4, inf.ipv4_prefix]), () => [...this._l2infs, ...this._l3infs].map((inf) => inf.mac), (ipv4_address) => { const inf = this.getInfFromIpv4(ipv4_address); if (inf) {
+            return inf.mac;
+        }
+        else {
+            return undefined;
+        } }, (packet) => { this.tryEncapsulateAndSend(packet); }, (frame, egress_mac) => {
+            if (RECORDING_ON) {
+                const timestamp = performance.now();
+                RECORDED_FRAMES.push([[new DisplayFrame(frame, egress_mac, () => this.coords)], timestamp]);
+            }
+            setTimeout(() => this.getInfFromMac(egress_mac)?.send(frame), 10);
+        }, (socket) => { this._sockets.addIcmpSocket(socket); }, (socket) => { this._sockets.deleteIcmpSocket(socket); }, (socket) => { this._sockets.addUdpSocket(socket); }, (socket) => { this._sockets.deleteUdpSocket(socket); });
     }
     static getList() {
         return this.DeviceList;
@@ -563,6 +576,19 @@ export class Device {
     }
 }
 Device.DeviceList = new IdentifiedList();
+export class Libraries {
+    constructor(getIpv4Addresses, getMacAddresses, getMacFromIpv4, sendPacket, sendFrame, bindICMP, closeICMP, bindUDP, closeUDP) {
+        this.getIpv4Addresses = getIpv4Addresses;
+        this.getMacAddresses = getMacAddresses;
+        this.getMacFromIpv4 = getMacFromIpv4;
+        this.sendPacket = sendPacket;
+        this.sendFrame = sendFrame;
+        this.bindICMP = bindICMP;
+        this.closeICMP = closeICMP;
+        this.bindUDP = bindUDP;
+        this.closeUDP = closeUDP;
+    }
+}
 /**
  * Acts as a middle-man between the network interfaces and the device itself
  */
@@ -592,6 +618,16 @@ export class PersonalComputer extends Device {
         this._l3infs.push(new L3Interface(this._network_controller, 0));
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
+        this._dhcp_client = new DhcpClient(this._lib, (inf_mac, ipv4_address, prefix) => {
+            const inf = this.getL3InfFromMac(inf_mac);
+            if (inf) {
+                inf.ipv4.value = [ipv4_address.value[0], ipv4_address.value[1], ipv4_address.value[2], ipv4_address.value[3]];
+                inf.ipv4_prefix.value = prefix.value;
+            }
+        }, (default_gateway) => { this.default_gateway = default_gateway; });
+        setTimeout(() => {
+            this._dhcp_client.enable(this.l3infs[0].mac);
+        }, 5000);
     }
     set ipv4(ipv4) {
         this._l3infs[0].ipv4.value = ipv4;
@@ -607,7 +643,15 @@ export class PersonalComputer extends Device {
         return this._l3infs[0];
     }
     set default_gateway(gateway) {
-        this._routing_table.set(new Ipv4Address([0, 0, 0, 0]), new Ipv4Prefix(0), new Ipv4Address(gateway), this._l3infs[0].ipv4, 1);
+        const quad_zero = new Ipv4Address([0, 0, 0, 0]);
+        const zero_prefix = new Ipv4Prefix(0);
+        const try_prev_default_gateway = this._routing_table.get(quad_zero);
+        if (try_prev_default_gateway) {
+            for (const route of try_prev_default_gateway) {
+                this._routing_table.delete(quad_zero, zero_prefix, route[0], route[1], 1);
+            }
+        }
+        this._routing_table.set(quad_zero, zero_prefix, gateway, this._l3infs[0].ipv4, 1);
     }
 }
 export class Switch extends Device {
@@ -630,6 +674,13 @@ export class Router extends Device {
         InfMatrix.link(...this._l3infs.map((x) => x.mac));
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
+        this._dhcp_server = new DhcpServer(this._lib);
+        setTimeout(() => {
+            this._dhcp_server.network = new Ipv4Address([192, 168, 0, 0]);
+            this._dhcp_server.prefix = new Ipv4Prefix(24);
+            this._dhcp_server.router = new Ipv4Address([192, 168, 0, 1]);
+            this._dhcp_server.enable();
+        }, 2000);
     }
 }
 //# sourceMappingURL=device.js.map

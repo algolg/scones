@@ -9,6 +9,7 @@ import { RoutingTable } from "./routing.js";
 import { Socket, SocketTable } from "./socket.js";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, ICON_SIZE, RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
 import { UdpDatagram } from "./protocols/udp.js";
+import { DhcpClient, DhcpServer } from "./protocols/dhcp.js";
 
 export interface IdentifiedItem {
     getId(): Identifier;
@@ -22,11 +23,12 @@ export abstract class Device implements IdentifiedItem {
     private readonly _id: DeviceID;
     private _ping_terminal_lines: string[] = [];
     private _forwarding_table: ForwardingInformationBase = new ForwardingInformationBase();
-    protected _arp_table: ArpTable = new ArpTable(); /* don't keep this public */
+    protected _arp_table: ArpTable = new ArpTable();
     protected _routing_table: RoutingTable = new RoutingTable();
     protected _network_controller: NetworkController = new NetworkController(this);
     protected _env: Map<string, string> = new Map();
     protected _sockets: SocketTable = new SocketTable();
+    protected _lib: Libraries;
     protected abstract _loopback: VirtualL3Interface;
     protected readonly _l3infs: L3Interface[] = [];
     protected readonly _l2infs: L2Interface[] = [];
@@ -48,6 +50,23 @@ export abstract class Device implements IdentifiedItem {
                 Device.DeviceList.push(this);
             }
         }
+        this._lib = new Libraries(
+            () => this._l3infs.map((inf) => [inf.ipv4,inf.ipv4_prefix]),
+            () => [...this._l2infs, ...this._l3infs].map((inf) => inf.mac),
+            (ipv4_address: Ipv4Address) => { const inf = this.getInfFromIpv4(ipv4_address); if (inf) { return inf.mac } else { return undefined; } },
+            (packet: Ipv4Packet) => { this.tryEncapsulateAndSend(packet); },
+            (frame: Frame, egress_mac: MacAddress) => {
+                if (RECORDING_ON) {
+                    const timestamp = performance.now();
+                    RECORDED_FRAMES.push([[new DisplayFrame(frame, egress_mac, () => this.coords)], timestamp]);
+                }
+                setTimeout(() => this.getInfFromMac(egress_mac)?.send(frame), 10);
+            },
+            (socket: Socket<IcmpDatagram>) => { this._sockets.addIcmpSocket(socket); },
+            (socket: Socket<IcmpDatagram>) => { this._sockets.deleteIcmpSocket(socket); },
+            (socket: Socket<UdpDatagram>) => { this._sockets.addUdpSocket(socket); },
+            (socket: Socket<UdpDatagram>) => { this._sockets.deleteUdpSocket(socket); },
+        );
     }
 
     public static getList(): ReadonlyArray<Device> {
@@ -344,14 +363,14 @@ export abstract class Device implements IdentifiedItem {
         return this._l3infs.concat(this._loopback).some((x) => x.ipv4.compare(ipv4) == 0);
     }
 
-    private getInfFromMac(mac: MacAddress): L2Interface | L3Interface {
+    protected getInfFromMac(mac: MacAddress): L2Interface | L3Interface {
         if (mac.compare(MacAddress.loopback) == 0) {
             return this._loopback;
         }
         return [...this._l2infs, ...this._l3infs].find((x) => x.mac.compare(mac) == 0);
     }
 
-    private getL3InfFromMac(mac: MacAddress): L3Interface {
+    protected getL3InfFromMac(mac: MacAddress): L3Interface {
         if (mac.compare(MacAddress.loopback) == 0) {
             return this._loopback;
         }
@@ -632,6 +651,40 @@ export abstract class Device implements IdentifiedItem {
     }
 }
 
+export class Libraries {
+    public getIpv4Addresses: () => [Ipv4Address, Ipv4Prefix][];
+    public getMacAddresses: () => MacAddress[];
+    public getMacFromIpv4: (ipv4_address: Ipv4Address) => MacAddress;
+    public sendPacket: (packet: Ipv4Packet) => void;
+    public sendFrame: (frame: Frame, egress_mac: MacAddress) => void;
+    public bindICMP: (socket: Socket<IcmpDatagram>) => void;
+    public closeICMP: (socket: Socket<IcmpDatagram>) => void;
+    public bindUDP: (socket: Socket<UdpDatagram>) => void;
+    public closeUDP: (socket: Socket<UdpDatagram>) => void;
+           
+    public constructor(
+        getIpv4Addresses: () => [Ipv4Address, Ipv4Prefix][],
+        getMacAddresses: () => MacAddress[],
+        getMacFromIpv4: (ipv4_address: Ipv4Address) => MacAddress,
+        sendPacket: (packet: Ipv4Packet) => void,
+        sendFrame: (frame: Frame, egress_mac: MacAddress) => void,
+        bindICMP: (socket: Socket<IcmpDatagram>) => void,
+        closeICMP: (socket: Socket<IcmpDatagram>) => void,
+        bindUDP: (socket: Socket<UdpDatagram>) => void,
+        closeUDP: (socket: Socket<UdpDatagram>) => void,
+    ) {
+        this.getIpv4Addresses = getIpv4Addresses;
+        this.getMacAddresses = getMacAddresses;
+        this.getMacFromIpv4 = getMacFromIpv4;
+        this.sendPacket = sendPacket;
+        this.sendFrame = sendFrame;
+        this.bindICMP = bindICMP;
+        this.closeICMP = closeICMP;
+        this.bindUDP = bindUDP;
+        this.closeUDP = closeUDP;
+    }
+}
+
 /**
  * Acts as a middle-man between the network interfaces and the device itself
  */
@@ -661,6 +714,7 @@ export class NetworkController {
 
 export class PersonalComputer extends Device {
     protected readonly _loopback: VirtualL3Interface = VirtualL3Interface.newLoopback(this._network_controller);
+    protected readonly _dhcp_client: DhcpClient;
 
     public constructor() {
         super(DeviceType.PC);
@@ -669,6 +723,22 @@ export class PersonalComputer extends Device {
 
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
+
+        this._dhcp_client = new DhcpClient(
+            this._lib,
+            (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => {
+                const inf = this.getL3InfFromMac(inf_mac);
+                if (inf) {
+                    inf.ipv4.value = [ipv4_address.value[0], ipv4_address.value[1], ipv4_address.value[2], ipv4_address.value[3]];
+                    inf.ipv4_prefix.value = prefix.value;
+                }
+            },
+            (default_gateway: Ipv4Address) => { this.default_gateway = default_gateway; },
+        )
+
+        setTimeout(() => {
+            this._dhcp_client.enable(this.l3infs[0].mac);
+        }, 5000)
     }
 
     public set ipv4(ipv4: [number, number, number, number]) {
@@ -688,14 +758,18 @@ export class PersonalComputer extends Device {
         return this._l3infs[0];
     }
 
-    public set default_gateway(gateway: [number, number, number, number]) {
-        this._routing_table.set(
-            new Ipv4Address([0,0,0,0]),
-            new Ipv4Prefix(0),
-            new Ipv4Address(gateway),
-            this._l3infs[0].ipv4,
-            1
-        )
+    public set default_gateway(gateway: Ipv4Address) {
+        const quad_zero = new Ipv4Address([0,0,0,0]);
+        const zero_prefix = new Ipv4Prefix(0);
+
+        const try_prev_default_gateway = this._routing_table.get(quad_zero);
+        if (try_prev_default_gateway) {
+            for (const route of try_prev_default_gateway) {
+                this._routing_table.delete(quad_zero, zero_prefix, route[0], route[1], 1);
+            }
+        }
+
+        this._routing_table.set(quad_zero, zero_prefix, gateway, this._l3infs[0].ipv4, 1);
     }
 }
 
@@ -713,6 +787,7 @@ export class Switch extends Device {
 
 export class Router extends Device {
     protected readonly _loopback: VirtualL3Interface = VirtualL3Interface.newLoopback(this._network_controller);
+    protected readonly _dhcp_server: DhcpServer;
 
     public constructor(num_inf: number) {
         super(DeviceType.ROUTER);
@@ -723,5 +798,15 @@ export class Router extends Device {
 
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
+
+        this._dhcp_server = new DhcpServer(this._lib);
+
+        setTimeout(() => {
+            this._dhcp_server.network = new Ipv4Address([192,168,0,0]);
+            this._dhcp_server.prefix = new Ipv4Prefix(24);
+            this._dhcp_server.router = new Ipv4Address([192,168,0,1]);
+
+            this._dhcp_server.enable();
+        }, 2000)
     }
 }

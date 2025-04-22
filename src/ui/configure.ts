@@ -180,6 +180,8 @@ export function displayFrames() {
         <label for="arp-select">ARP</label>
         <input id="icmp-select" type="checkbox" checked/>
         <label for="icmp-select">ICMP</label>
+        <input id="udp-select" type="checkbox" checked/>
+        <label for="udp-select">UDP</label>
     </div>
     `;
 

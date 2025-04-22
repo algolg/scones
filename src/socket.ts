@@ -1,3 +1,4 @@
+import { Ipv4Address } from "./addressing.js";
 import { IcmpDatagram } from "./protocols/icmp.js";
 import { Ipv4Packet } from "./protocols/ip.js";
 import { UdpDatagram } from "./protocols/udp.js";
@@ -25,6 +26,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
     readonly direction: Direction;
     private readonly _matched: [T, Ipv4Packet][] = [];
     private _hits: number = 0;
+    private _killed = false;
 
     public constructor(protocol: Protocol, direction: Direction, check_function: (arg0: T, arg1: Ipv4Packet) => boolean, action: Action = Action.ACCEPT) {
         this.protocol = protocol;
@@ -46,13 +48,13 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
                 const data_received = this._matched.length > num_matched;
                 const timed_out = timeout_ms ? (performance.now() - start) >= timeout_ms - POLLING_INTERVAL : false;
                 
-                if (data_received || timed_out) {
+                if (data_received || timed_out || this._killed) {
                     clearInterval(interval);
                 }
                 if (data_received) {
                     resolve(this.matched_top);
                 }
-                else if (timed_out) {
+                else if (timed_out || this._killed) {
                     resolve(undefined);
                 }
 
@@ -79,6 +81,13 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
         }
     }
 
+    public kill() {
+        this._killed = true;
+        setTimeout(() => {
+            this._killed = false;
+        }, POLLING_INTERVAL);
+    }
+
     public createResponse(packet: Ipv4Packet): Ipv4Packet {
         return this._createResponse(packet);
     }
@@ -99,7 +108,17 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
             },
         )
     }
-    
+
+    public static udpSocket(ipv4_address: Ipv4Address, port_num: number): Socket<UdpDatagram> {
+        const ip_check = (ipv4_packet: Ipv4Packet) => { if (ipv4_address) { return ipv4_address.isBroadcast() || ipv4_packet.dest.compare(ipv4_address) == 0; } else { return true; } };
+        return new Socket(
+            Protocol.UDP,
+            Direction.IN,
+            (udp_datagram: UdpDatagram, ipv4_packet: Ipv4Packet): boolean => {
+                return ip_check(ipv4_packet) && udp_datagram.dest_port == port_num
+            }
+        );
+    };
 }
 
 export class SocketTable {

@@ -197,9 +197,7 @@ export class MacAddress implements Identifier {
         this.value = this.value.map((ele, idx) => (ele = arr[idx]));
     }
 
-    public static get byteLength(): number {
-        return 6;
-    }
+    public static byteLength = 6;
     
     public static get broadcast(): MacAddress {
         return new MacAddress([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
@@ -307,9 +305,7 @@ export class Ipv4Address implements GeneralIpAddress {
         return EtherType.IPv4;
     }
 
-    public static get byteLength(): number {
-        return 4;
-    }
+    public static byteLength = 4;
     
     public static get broadcast(): Ipv4Address {
         return new Ipv4Address([255, 255, 255, 255]);
@@ -339,6 +335,34 @@ export class Ipv4Address implements GeneralIpAddress {
     public and(prefix: Ipv4Prefix): Ipv4Address {
         const anded = this._value.map((x,idx) => x & prefix.mask._value[idx]);
         return new Ipv4Address([anded[0], anded[1], anded[2], anded[3]]);
+    }
+
+    public broadcastAddress(prefix: Ipv4Prefix): Ipv4Address {
+        const ored = this._value.map((x,idx) => x | (0xff - prefix.mask._value[idx]));
+        return new Ipv4Address([ored[0], ored[1], ored[2], ored[3]]);
+    }
+
+    /**
+     * Creates a copy of the current IPv4 address and increments it by 1.
+     * If the current IPv4 address is 255.255.255.255, an identical copy is returned.
+     * @returns a copy of the current IPv4 address, incremented by 1
+     */
+    public inc(): Ipv4Address {
+        if (this.isBroadcast()) {
+            return Ipv4Address.broadcast;
+        }
+
+        const incremented_ipv4 = new Ipv4Address([this._value[0], this._value[1], this._value[2], this._value[3]]);
+        for (let i=3; i>=0; i--) {
+            if (incremented_ipv4._value[i] == 0xff) {
+                incremented_ipv4._value[i] = 0;
+                continue;
+            }
+            incremented_ipv4._value[i]++;
+            return incremented_ipv4;
+        }
+
+        return Ipv4Address.broadcast;
     }
 
     public compare(other: Ipv4Address): number {

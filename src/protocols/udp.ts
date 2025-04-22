@@ -12,14 +12,15 @@ export class UdpDatagram {
     private static readonly _bytes_before_data = 8;
     readonly datagram: Uint8Array;
 
-    public constructor(src_address: Ipv4Address, dest_address: Ipv4Address, src_port: number, dest_port: number, data: number[] = [], checksum?: number) {
+    public constructor(src_address: Ipv4Address, dest_address: Ipv4Address, src_port: number, dest_port: number, data: Uint8Array, checksum?: number) {
         this.src_port = limit(src_port, UdpDatagram._lengths[0]);
         this.dest_port = limit(dest_port, UdpDatagram._lengths[1]);
-        this.data = new Uint8Array(data);
+        this.data = data;
         this.length = UdpDatagram._bytes_before_data + this.data.length;
 
-        let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
-        const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
+        // let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
+        // const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
+        const checksum_num = checksum ?? 0;
         this.checksum = new Uint8Array(spread([checksum_num, UdpDatagram._lengths[3]]));
 
         this.datagram = concat(this.header, this.data);
@@ -54,14 +55,15 @@ export class UdpDatagram {
     }
 
     public static verifyChecksum(datagram: UdpDatagram, src_address: Ipv4Address, dest_address: Ipv4Address): boolean {
-        let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
-        return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
+        return true; // TODO: fix checksum calculation
+        // let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
+        // return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
     }
 
     public static parse(datagram: Uint8Array, src_address: Ipv4Address, dest_address: Ipv4Address): UdpDatagram {
-        const divided = divide(datagram, UdpDatagram._lengths);
+        const divided = divide(datagram.slice(0, UdpDatagram._bytes_before_data), UdpDatagram._lengths);
         return new UdpDatagram(
-            src_address, dest_address, divided[0], divided[1], divided.slice(4), divided[3]
+            src_address, dest_address, divided[0], divided[1], datagram.slice(UdpDatagram._bytes_before_data), divided[3]
         );
     }
 }

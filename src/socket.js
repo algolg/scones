@@ -27,6 +27,7 @@ export class Socket {
         this._createResponse = (packet) => undefined;
         this._matched = [];
         this._hits = 0;
+        this._killed = false;
         this.protocol = protocol;
         this.direction = direction;
         this._check = check_function;
@@ -42,13 +43,13 @@ export class Socket {
             const interval = setInterval(() => {
                 const data_received = this._matched.length > num_matched;
                 const timed_out = timeout_ms ? (performance.now() - start) >= timeout_ms - POLLING_INTERVAL : false;
-                if (data_received || timed_out) {
+                if (data_received || timed_out || this._killed) {
                     clearInterval(interval);
                 }
                 if (data_received) {
                     resolve(this.matched_top);
                 }
-                else if (timed_out) {
+                else if (timed_out || this._killed) {
                     resolve(undefined);
                 }
                 num_matched = this._matched.length;
@@ -71,6 +72,12 @@ export class Socket {
             return undefined;
         }
     }
+    kill() {
+        this._killed = true;
+        setTimeout(() => {
+            this._killed = false;
+        }, POLLING_INTERVAL);
+    }
     createResponse(packet) {
         return this._createResponse(packet);
     }
@@ -82,6 +89,18 @@ export class Socket {
                 icmp_datagram.data.slice(echo_packet.ihl * 4).every((x, idx) => x == echo_packet.data[idx]));
         });
     }
+    static udpSocket(ipv4_address, port_num) {
+        const ip_check = (ipv4_packet) => { if (ipv4_address) {
+            return ipv4_address.isBroadcast() || ipv4_packet.dest.compare(ipv4_address) == 0;
+        }
+        else {
+            return true;
+        } };
+        return new Socket(Protocol.UDP, Direction.IN, (udp_datagram, ipv4_packet) => {
+            return ip_check(ipv4_packet) && udp_datagram.dest_port == port_num;
+        });
+    }
+    ;
 }
 export class SocketTable {
     constructor() {

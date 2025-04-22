@@ -45,6 +45,10 @@ export function getExplanation(frame) {
                 protocol = Protocol.ICMP;
                 [type, description] = getICMPExplanation(packet);
                 break;
+            case InternetProtocolNumbers.UDP:
+                protocol = Protocol.UDP;
+                // TODO: ADD INFO FOR UDP
+                break;
         }
     }
     let extra_info = "";

@@ -162,9 +162,6 @@ export class MacAddress {
         this.value = new Uint8Array(6);
         this.value = this.value.map((ele, idx) => (ele = arr[idx]));
     }
-    static get byteLength() {
-        return 6;
-    }
     static get broadcast() {
         return new MacAddress([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
     }
@@ -233,6 +230,7 @@ export class MacAddress {
         return Array.from(this.value).map((x) => (x).toString(16).padStart(2, "0")).join(":");
     }
 }
+MacAddress.byteLength = 6;
 export class Ipv4Address {
     constructor(arr) {
         this._value = new Uint8Array(4);
@@ -247,9 +245,6 @@ export class Ipv4Address {
     }
     get ethertype() {
         return EtherType.IPv4;
-    }
-    static get byteLength() {
-        return 4;
     }
     static get broadcast() {
         return new Ipv4Address([255, 255, 255, 255]);
@@ -273,6 +268,30 @@ export class Ipv4Address {
     and(prefix) {
         const anded = this._value.map((x, idx) => x & prefix.mask._value[idx]);
         return new Ipv4Address([anded[0], anded[1], anded[2], anded[3]]);
+    }
+    broadcastAddress(prefix) {
+        const ored = this._value.map((x, idx) => x | (0xff - prefix.mask._value[idx]));
+        return new Ipv4Address([ored[0], ored[1], ored[2], ored[3]]);
+    }
+    /**
+     * Creates a copy of the current IPv4 address and increments it by 1.
+     * If the current IPv4 address is 255.255.255.255, an identical copy is returned.
+     * @returns a copy of the current IPv4 address, incremented by 1
+     */
+    inc() {
+        if (this.isBroadcast()) {
+            return Ipv4Address.broadcast;
+        }
+        const incremented_ipv4 = new Ipv4Address([this._value[0], this._value[1], this._value[2], this._value[3]]);
+        for (let i = 3; i >= 0; i--) {
+            if (incremented_ipv4._value[i] == 0xff) {
+                incremented_ipv4._value[i] = 0;
+                continue;
+            }
+            incremented_ipv4._value[i]++;
+            return incremented_ipv4;
+        }
+        return Ipv4Address.broadcast;
     }
     compare(other) {
         for (let i = 0; i < 4; i++) {
@@ -306,6 +325,7 @@ export class Ipv4Address {
         return new Ipv4Address(num_arr);
     }
 }
+Ipv4Address.byteLength = 4;
 export class Ipv4Prefix {
     constructor(ipv4_prefix) {
         this._ipv4_prefix = ipv4_prefix & 0x3F;

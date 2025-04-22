@@ -178,7 +178,7 @@
     color: #3d3dee;
 }
 .udp-label {
-    color: #ff6a25;
+    color: #b32828;
 }
 
 #frame-selectors {
@@ -186,10 +186,14 @@
 }
 
 .arp-frame,
-.icmp-frame {
+.icmp-frame,
+.udp-frame
+{
     display: none;
 }
 #frame-selectors:has(> #arp-select:checked) ~ .arp-frame,
-#frame-selectors:has(> #icmp-select:checked) ~ .icmp-frame {
+#frame-selectors:has(> #icmp-select:checked) ~ .icmp-frame,
+#frame-selectors:has(> #udp-select:checked) ~ .udp-frame
+{
     display: block;
 }

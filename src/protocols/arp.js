@@ -1,6 +1,6 @@
 import { Ipv4Address, MacAddress, concat, divide, spread } from "../addressing.js";
 import { EtherType } from "../frame.js";
-var HTYPE;
+export var HTYPE;
 (function (HTYPE) {
     HTYPE[HTYPE["ETHERNET"] = 1] = "ETHERNET";
 })(HTYPE || (HTYPE = {}));
