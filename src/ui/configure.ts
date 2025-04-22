@@ -112,7 +112,7 @@ const pingTool = (device: Device) => {
                 <input name="ttl" type="number" min="1", max="255", value="64"/>
                 <label for="count">Count</label>
                 <input name="count" type="number" min="1", max="255", value="4"/>
-                <button type="submit" class="gap-above">Send</button>
+                <button type="submit">Send</button>
             </form>
             <div id="ping-terminal-${device.getId().value}" class="config-terminal dark-bg gap-above mono">
                 ${ping_terminal_lines}
@@ -129,9 +129,7 @@ const dhcpClientTool = () => {
         <input id="dhcp-dropdown" class="option-dropdown" type="checkbox">
         <label for="dhcp-dropdown" class="option-dropdown-label">DHCP Client</label>
         <div class="option-dropdown-contents">
-            <form id="dhcp-client-form" class="option-form" onsubmit="toggleDhcpClient()">
-                <button type="submit">Toggle DHCP Client</button>
-            </form>
+            <button type="toggle" onclick="toggleDhcpClient()">Toggle DHCP Client</button>
         </div>
     </div>
     `
@@ -142,14 +140,14 @@ const dhcpServerTool = (network_address: Ipv4Address, prefix: Ipv4Prefix, router
     <div class="config-option">
         <input id="dhcp-server-dropdown" class="option-dropdown" type="checkbox">
         <label for="dhcp-server-dropdown" class="option-dropdown-label">DHCP Server</label>
-        <div class="option-dropdown-contents">
+    <div class="option-dropdown-contents">
             <form class="option-form dhcp-server-change">
                 <label for="dhcp-network">DHCP Network Address</label>
-                <input name="dhcp-network" onchange="dhcpServerUpdateNetwork(this)" class="mono" type="text" placeholder="A.B.C.D" value="${network_address ?? ''}"/>
+                <input name="dhcp-network" onchange="dhcpServerUpdateNetwork(this)" class="mono" type="text" placeholder="A.B.C.D" value="${network_address ?? ''}" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
                 <label for="dhcp-prefix">DHCP Network Prefix</label>
                 <input name="dhcp-prefix" onchange="dhcpServerUpdatePrefix(this)" class="mono" type="number" min="0" max="30" value="${prefix?.value ?? undefined}"/>
                 <label for="dhcp-router">DHCP Router</label>
-                <input name="dhcp-network" onchange="dhcpServerUpdateRouter(this)" class="mono" type="text" placeholder="A.B.C.D" value="${router ?? ''}"/>
+                <input name="dhcp-network" onchange="dhcpServerUpdateRouter(this)" class="mono" type="text" placeholder="A.B.C.D" value="${router ?? ''}" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
             </form>
         </div>
     </div>
@@ -185,6 +183,9 @@ export function resetConfigurePanel() {
 export function displayInfo(device: Device) {
     // configurePanel.setAttribute("current", device.getId().value.toString());
     clearConfigurePanel();
+    
+    let prevent_default_form_ids: string[] = [];
+
     configurePanel.innerHTML += `<h2>Interfaces</h2>`
     for (let [idx, l2inf] of device.l2infs.entries()) {
         configurePanel.innerHTML += interfaceConfig(idx, l2inf.mac, InfLayer.L2, l2inf.isActive());
@@ -195,18 +196,22 @@ export function displayInfo(device: Device) {
     if (device.l3infs.length > 0) {
         // add routing section and ping section
         configurePanel.innerHTML += routeConfig(device.getAllRoutes());
-        document.getElementById('add-route-form').addEventListener("submit", x => x.preventDefault());
+        prevent_default_form_ids.push('add-route-form');
 
         configurePanel.innerHTML += `<h2>Tools</h2>`;
         configurePanel.innerHTML += pingTool(device);
-        document.getElementById('execute-ping-form').addEventListener("submit", x => x.preventDefault());
+        prevent_default_form_ids.push('execute-ping-form');
+
+        if (device.device_type == DeviceType.PC) {
+            configurePanel.innerHTML += dhcpClientTool();
+        }
+        else if (isRouter(device)) {
+            configurePanel.innerHTML += dhcpServerTool(device._dhcp_server.network, device._dhcp_server.prefix, device._dhcp_server.router);
+        }
     }
-    if (device.device_type == DeviceType.PC) {
-        configurePanel.innerHTML += dhcpClientTool();
-        document.getElementById('dhcp-client-form').addEventListener("submit", x => x.preventDefault());
-    }
-    else if (isRouter(device)) {
-        configurePanel.innerHTML += dhcpServerTool(device._dhcp_server.network, device._dhcp_server.prefix, device._dhcp_server.router);
+
+    for (const form_id of prevent_default_form_ids) {
+        document.getElementById(form_id).addEventListener("submit", x => x.preventDefault());
     }
 }
 

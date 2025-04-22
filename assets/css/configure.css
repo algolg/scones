@@ -88,7 +88,7 @@
 .option-form {
     display: block;
 }
-.option-form > input, select, button[type=submit] {
+.option-form > input, select, button[type=submit], button[type="toggle"] {
     display: block;
     padding: 4px;
     max-width: 100%;
@@ -101,6 +101,9 @@
 }
 .option-form > input[type=number] {
     width: 5em;
+}
+.option-form > button[type=submit] {
+    margin-top: 8px;
 }
 
 .config-table {
