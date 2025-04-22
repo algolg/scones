@@ -1,4 +1,5 @@
 import { Ipv4Address, Ipv4Prefix } from "../addressing.js";
+import { DeviceType } from "../device.js";
 import { IcmpControlMessage, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InfLayer, InfMatrix } from "../interface.js";
 import { Protocol } from "../socket.js";
@@ -103,11 +104,43 @@ const pingTool = (device) => {
                 <input name="ttl" type="number" min="1", max="255", value="64"/>
                 <label for="count">Count</label>
                 <input name="count" type="number" min="1", max="255", value="4"/>
-                <button type="submit">Send</button>
+                <button type="submit" class="gap-above">Send</button>
             </form>
             <div id="ping-terminal-${device.getId().value}" class="config-terminal dark-bg gap-above mono">
                 ${ping_terminal_lines}
             </div>
+        </div>
+    </div>
+    `;
+};
+// TODO: implement this as a feature on interface
+const dhcpClientTool = () => {
+    return `
+    <div class="config-option">
+        <input id="dhcp-dropdown" class="option-dropdown" type="checkbox">
+        <label for="dhcp-dropdown" class="option-dropdown-label">DHCP Client</label>
+        <div class="option-dropdown-contents">
+            <form id="dhcp-client-form" class="option-form" onsubmit="toggleDhcpClient()">
+                <button type="submit">Toggle DHCP Client</button>
+            </form>
+        </div>
+    </div>
+    `;
+};
+const dhcpServerTool = (network_address, prefix, router) => {
+    return `
+    <div class="config-option">
+        <input id="dhcp-server-dropdown" class="option-dropdown" type="checkbox">
+        <label for="dhcp-server-dropdown" class="option-dropdown-label">DHCP Server</label>
+        <div class="option-dropdown-contents">
+            <form class="option-form dhcp-server-change">
+                <label for="dhcp-network">DHCP Network Address</label>
+                <input name="dhcp-network" onchange="dhcpServerUpdateNetwork(this)" class="mono" type="text" placeholder="A.B.C.D" value="${network_address ?? ''}"/>
+                <label for="dhcp-prefix">DHCP Network Prefix</label>
+                <input name="dhcp-prefix" onchange="dhcpServerUpdatePrefix(this)" class="mono" type="number" min="0" max="30" value="${prefix?.value ?? undefined}"/>
+                <label for="dhcp-router">DHCP Router</label>
+                <input name="dhcp-network" onchange="dhcpServerUpdateRouter(this)" class="mono" type="text" placeholder="A.B.C.D" value="${router ?? ''}"/>
+            </form>
         </div>
     </div>
     `;
@@ -153,6 +186,13 @@ export function displayInfo(device) {
         configurePanel.innerHTML += `<h2>Tools</h2>`;
         configurePanel.innerHTML += pingTool(device);
         document.getElementById('execute-ping-form').addEventListener("submit", x => x.preventDefault());
+    }
+    if (device.device_type == DeviceType.PC) {
+        configurePanel.innerHTML += dhcpClientTool();
+        document.getElementById('dhcp-client-form').addEventListener("submit", x => x.preventDefault());
+    }
+    else if (isRouter(device)) {
+        configurePanel.innerHTML += dhcpServerTool(device._dhcp_server.network, device._dhcp_server.prefix, device._dhcp_server.router);
     }
 }
 export function displayFrames() {
@@ -401,4 +441,80 @@ function refreshPingTerminal(device) {
         ping_terminal.innerHTML = '<div>' + device.ping_terminal_lines.join('</div><div>') + '</div>';
     }
 }
+function ipv4AddressFromInputEle(ele) {
+    const num_str = ele.getAttribute('num');
+    if (num_str === undefined) {
+        return undefined;
+    }
+    const num = parseInt(num_str);
+    if (num < 0 || num >= focusedDevice.l3infs.length) {
+        return undefined;
+    }
+    const ipv4 = Ipv4Address.parseString(ele.value);
+    if (ipv4 === undefined) {
+        return undefined;
+    }
+    return ipv4;
+}
+function ipv4PrefixFromInputEle(ele) {
+    const num_str = ele.getAttribute('num');
+    if (num_str === undefined) {
+        return undefined;
+    }
+    const num = parseInt(num_str);
+    if (num < 0 || num >= focusedDevice.l3infs.length) {
+        return undefined;
+    }
+    const prefix = ele.valueAsNumber;
+    if (prefix === undefined || prefix < 0 || prefix > 32) {
+        return undefined;
+    }
+    return new Ipv4Prefix(prefix);
+}
+function isPC(dev) {
+    return dev.toggleDhcpClient() !== undefined;
+}
+function isRouter(dev) {
+    return dev._dhcp_server !== undefined;
+}
+function toggleDhcpClient() {
+    const device = focusedDevice;
+    if (isPC(device)) {
+        device.toggleDhcpClient();
+    }
+}
+window.toggleDhcpClient = toggleDhcpClient;
+function dhcpServerUpdateNetwork(ele) {
+    const network = ipv4AddressFromInputEle(ele);
+    if (!network) {
+        return;
+    }
+    const device = focusedDevice;
+    if (isRouter(device)) {
+        device._dhcp_server.network = network;
+    }
+}
+window.dhcpServerUpdateNetwork = dhcpServerUpdateNetwork;
+function dhcpServerUpdatePrefix(ele) {
+    const prefix = ipv4PrefixFromInputEle(ele);
+    if (!prefix) {
+        return;
+    }
+    const device = focusedDevice;
+    if (isRouter(device)) {
+        device._dhcp_server.prefix = prefix;
+    }
+}
+window.dhcpServerUpdatePrefix = dhcpServerUpdatePrefix;
+function dhcpServerUpdateRouter(ele) {
+    const router = ipv4AddressFromInputEle(ele);
+    if (!router) {
+        return;
+    }
+    const device = focusedDevice;
+    if (isRouter(device)) {
+        device._dhcp_server.router = router;
+    }
+}
+window.dhcpServerUpdateRouter = dhcpServerUpdateRouter;
 //# sourceMappingURL=configure.js.map

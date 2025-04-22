@@ -31,6 +31,7 @@ var DhcpMessageType;
 })(DhcpMessageType || (DhcpMessageType = {}));
 export class DhcpServer {
     constructor(lib) {
+        this._enabled = false;
         this._network = null;
         this._prefix = null;
         this._router = null;
@@ -42,12 +43,17 @@ export class DhcpServer {
         this.lib = lib;
         this.sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpServer.PORT);
     }
+    get enabled() {
+        return this._enabled;
+    }
     set network(network) {
         this._network = network;
     }
     set prefix(prefix) {
         this._prefix = prefix;
-        this._network = this._network.and(this._prefix);
+        if (this._network) {
+            this._network = this._network.and(this._prefix);
+        }
     }
     set router(default_router) {
         this._router = default_router;
@@ -184,6 +190,7 @@ export class DhcpServer {
 DhcpServer.PORT = 67;
 export class DhcpClient {
     constructor(lib, setIpAndPrefix, setDefaultGateway) {
+        this._enabled = false;
         this.active_sockets = new Map();
         this.killed = new Set();
         this.POLL_LEN = 5000;
@@ -191,7 +198,11 @@ export class DhcpClient {
         this.setIpAndPrefix = setIpAndPrefix;
         this.setDefaultGateway = setDefaultGateway;
     }
-    async disable(egress_mac) {
+    get enabled() {
+        return this._enabled;
+    }
+    disable(egress_mac) {
+        this._enabled = false;
         this.killed.add(egress_mac);
         const mac_str = egress_mac.toString();
         if (this.active_sockets.has(mac_str)) {
@@ -203,8 +214,11 @@ export class DhcpClient {
     }
     // should probably split this into functions...
     async enable(egress_mac) {
+        this._enabled = true;
         let found = false;
         const mac_str = egress_mac.toString();
+        // TODO: should link-local address be used?
+        this.setIpAndPrefix(egress_mac, new Ipv4Address([0, 0, 0, 0]), new Ipv4Prefix(0));
         // all sockets for a single device are identical -->
         // this will cause issues if DHCP is enabled simultaneously on multiple interfaces
         const sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpClient.PORT);

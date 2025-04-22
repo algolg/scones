@@ -102,9 +102,6 @@
 .option-form > input[type=number] {
     width: 5em;
 }
-.option-form > button[type=submit] {
-    margin-top: 8px;
-}
 
 .config-table {
     width: 100%;

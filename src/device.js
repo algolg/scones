@@ -625,9 +625,16 @@ export class PersonalComputer extends Device {
                 inf.ipv4_prefix.value = prefix.value;
             }
         }, (default_gateway) => { this.default_gateway = default_gateway; });
-        setTimeout(() => {
-            this._dhcp_client.enable(this.l3infs[0].mac);
-        }, 5000);
+    }
+    // TODO: remove this function, delegate to interfaces
+    toggleDhcpClient() {
+        const mac = this._l3infs[0].mac;
+        if (this._dhcp_client.enabled) {
+            this._dhcp_client.disable(mac);
+        }
+        else {
+            this._dhcp_client.enable(mac);
+        }
     }
     set ipv4(ipv4) {
         this._l3infs[0].ipv4.value = ipv4;
@@ -675,12 +682,8 @@ export class Router extends Device {
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
         this._dhcp_server = new DhcpServer(this._lib);
-        setTimeout(() => {
-            this._dhcp_server.network = new Ipv4Address([192, 168, 0, 0]);
-            this._dhcp_server.prefix = new Ipv4Prefix(24);
-            this._dhcp_server.router = new Ipv4Address([192, 168, 0, 1]);
-            this._dhcp_server.enable();
-        }, 2000);
+        // TODO: allow users to toggle DHCP Server on/off
+        this._dhcp_server.enable();
     }
 }
 //# sourceMappingURL=device.js.map

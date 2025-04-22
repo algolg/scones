@@ -19,7 +19,7 @@ enum DhcpMessageType {
 
 export class DhcpServer {
     private readonly lib: Libraries;
-    private _enabled: boolean;
+    private _enabled: boolean = false;
     private _network: Ipv4Address = null;
     private _prefix: Ipv4Prefix = null;
     private _router: Ipv4Address = null;
@@ -38,13 +38,19 @@ export class DhcpServer {
         this.sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpServer.PORT);
     }
 
+    public get enabled(): boolean {
+        return this._enabled;
+    }
+
     public set network(network: Ipv4Address) {
         this._network = network;
     }
 
     public set prefix(prefix: Ipv4Prefix) {
         this._prefix = prefix;
-        this._network = this._network.and(this._prefix);
+        if (this._network) {
+            this._network = this._network.and(this._prefix);
+        }
     }
 
     public set router(default_router: Ipv4Address) {
@@ -204,6 +210,7 @@ export class DhcpServer {
 
 export class DhcpClient {
     private readonly lib: Libraries;
+    private _enabled: boolean = false;
     private setIpAndPrefix: (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => void;
     private setDefaultGateway: (default_gateway: Ipv4Address) => void;
 
@@ -224,7 +231,12 @@ export class DhcpClient {
         this.setDefaultGateway = setDefaultGateway;
     }
 
-    public async disable(egress_mac: MacAddress) {
+    public get enabled(): boolean {
+        return this._enabled;
+    }
+
+    public disable(egress_mac: MacAddress) {
+        this._enabled = false;
         this.killed.add(egress_mac);
         const mac_str = egress_mac.toString();
         if (this.active_sockets.has(mac_str)) {
@@ -238,8 +250,12 @@ export class DhcpClient {
 
     // should probably split this into functions...
     public async enable(egress_mac: MacAddress) {
+        this._enabled = true;
         let found = false;
         const mac_str = egress_mac.toString();
+
+        // TODO: should link-local address be used?
+        this.setIpAndPrefix(egress_mac, new Ipv4Address([0,0,0,0]), new Ipv4Prefix(0));
 
         // all sockets for a single device are identical -->
         // this will cause issues if DHCP is enabled simultaneously on multiple interfaces
