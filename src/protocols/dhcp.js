@@ -111,7 +111,7 @@ export class DhcpServer {
         // TODO: a check should be performed before including subnet mask, router in offer
         // (this also applies for the ack)
         const offer = DhcpPayload.dhcpOffer(request.xid, chaddr, offered_ipv4, server_ip, this._prefix.mask, this._router);
-        const offer_frame = this.createFrame(offer, chaddr, server_mac, server_ip, offered_ipv4);
+        const offer_frame = this.createFrame(offer, chaddr, server_mac, server_ip, new Ipv4Address([0, 0, 0, 0]));
         console.log(`DHCP-SVR: SENDING OFFER`);
         this.lib.sendFrame(offer_frame, server_mac);
         this.offers_given_mac.set(chaddr.toString(), offered_ipv4);
@@ -142,7 +142,7 @@ export class DhcpServer {
             const offered_ipv4 = this.offers_given_mac.get(chaddr_str);
             // send ack
             const ack = DhcpPayload.dhcpAck(dhcp_payload.xid, this.LEASE_TIME, chaddr, offered_ipv4, server_ip, this._prefix.mask, this._router);
-            const ack_frame = this.createFrame(ack, chaddr, server_mac, server_ip, offered_ipv4);
+            const ack_frame = this.createFrame(ack, chaddr, server_mac, server_ip, new Ipv4Address([0, 0, 0, 0]));
             console.log(`DHCP-SVR: SENDING ACK`);
             this.lib.sendFrame(ack_frame, server_mac);
             this.offers_given_mac.delete(chaddr_str);
@@ -183,7 +183,7 @@ export class DhcpServer {
     }
     createFrame(dhcp_payload, client_mac, server_mac, server_ip, client_ip) {
         const discoverDatagram = new UdpDatagram(server_ip, client_ip, DhcpServer.PORT, DhcpClient.PORT, dhcp_payload.payload);
-        const discoverPacket = new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.UDP, server_ip, new Ipv4Address([0, 0, 0, 0]), [], discoverDatagram.datagram);
+        const discoverPacket = new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.UDP, server_ip, client_ip, [], discoverDatagram.datagram);
         return new Frame(client_mac, server_mac, EtherType.IPv4, discoverPacket.packet);
     }
 }

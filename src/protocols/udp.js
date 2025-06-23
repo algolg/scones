@@ -1,5 +1,5 @@
 import { concat, divide, limit, spread } from "../addressing.js";
-import { InternetProtocolNumbers } from "./ip.js";
+import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 export class UdpDatagram {
     constructor(src_address, dest_address, src_port, dest_port, data, checksum) {
         this.checksum = new Uint8Array(2);
@@ -7,9 +7,8 @@ export class UdpDatagram {
         this.dest_port = limit(dest_port, UdpDatagram._lengths[1]);
         this.data = data;
         this.length = UdpDatagram._bytes_before_data + this.data.length;
-        // let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
-        // const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
-        const checksum_num = checksum ?? 0;
+        let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
+        const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
         this.checksum = new Uint8Array(spread([checksum_num, UdpDatagram._lengths[3]]));
         this.datagram = concat(this.header, this.data);
     }
@@ -22,9 +21,8 @@ export class UdpDatagram {
         ]), new Uint8Array(spread([UdpDatagram._bytes_before_data + datagram.data.length, 16], [datagram.src_port, 16], [datagram.dest_port, 16], [datagram.length, 16])), datagram.checksum, datagram.data);
     }
     static verifyChecksum(datagram, src_address, dest_address) {
-        return true; // TODO: fix checksum calculation
-        // let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
-        // return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
+        let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
+        return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
     }
     static parse(datagram, src_address, dest_address) {
         const divided = divide(datagram.slice(0, UdpDatagram._bytes_before_data), UdpDatagram._lengths);

@@ -18,9 +18,8 @@ export class UdpDatagram {
         this.data = data;
         this.length = UdpDatagram._bytes_before_data + this.data.length;
 
-        // let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
-        // const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
-        const checksum_num = checksum ?? 0;
+        let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
+        const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
         this.checksum = new Uint8Array(spread([checksum_num, UdpDatagram._lengths[3]]));
 
         this.datagram = concat(this.header, this.data);
@@ -55,9 +54,8 @@ export class UdpDatagram {
     }
 
     public static verifyChecksum(datagram: UdpDatagram, src_address: Ipv4Address, dest_address: Ipv4Address): boolean {
-        return true; // TODO: fix checksum calculation
-        // let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
-        // return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
+        let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
+        return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
     }
 
     public static parse(datagram: Uint8Array, src_address: Ipv4Address, dest_address: Ipv4Address): UdpDatagram {

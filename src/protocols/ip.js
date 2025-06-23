@@ -43,10 +43,12 @@ export class Ipv4Packet {
         return (~num >>> 0) & 0xFFFF;
     }
     static calculateChecksum(header_without_checksum) {
-        let words = divide(header_without_checksum, Array(header_without_checksum.length / 2).fill(16));
         let sum = 0;
-        for (let word of words) {
-            sum += word;
+        for (let i = 0; i < header_without_checksum.length; i += 2) {
+            sum += header_without_checksum[i] * 2 ** 8;
+            if (i + 1 < header_without_checksum.length) {
+                sum += header_without_checksum[i + 1];
+            }
         }
         while (Math.ceil(Math.log2(sum)) > 16) {
             sum = (sum >>> 16) + (sum & 0xFFFF);
@@ -54,8 +56,7 @@ export class Ipv4Packet {
         return Ipv4Packet.onesComplement16Bits(sum);
     }
     static verifyChecksum(packet) {
-        // return this.calculateChecksum(packet.header) == 0;
-        return true;
+        return this.calculateChecksum(packet.header) == 0;
     }
     static parsePacket(packet) {
         const divided = divide(packet.slice(0, Ipv4Packet._bytes_before_options), Ipv4Packet._lengths);

@@ -257,9 +257,7 @@ export function displayFrames() {
             }
             else {
                 const src_coords = frame.sender_coords();
-                console.log(`${frame.egress_mac}`);
                 const dest_inf = InfMatrix.getNeighborInf(frame.egress_mac);
-                console.log(`${dest_inf}`);
                 if (src_coords === undefined || dest_inf === undefined) {
                     throw "invalid frame";
                 }
