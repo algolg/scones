@@ -11,7 +11,7 @@ import { RECORDED_FRAMES } from "./variables.js";
 
 export const configurePanel = document.getElementById('configure-panel');
 
-const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_active: boolean, ipv4_address?: Ipv4Address, ipv4_prefix?: Ipv4Prefix) => 
+const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_active: boolean, ipv4_address?: Ipv4Address, ipv4_prefix?: Ipv4Prefix, dhcp_enabled?: boolean) => 
 `
 <div class="config-option">
     <input id="eth${id_num}-dropdown" class="option-dropdown" type="checkbox">
@@ -30,6 +30,9 @@ const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_ac
                 <input name="ipv4-address" onchange="updateIpv4Address(this)" class="mono" type="text" placeholder="A.B.C.D" value="${ipv4_address ?? ''}" num="${id_num}"/>
                 <label for="ipv4-prefix">IPv4 Prefix</label>
                 <input name="ipv4-prefix" onchange="updateIpv4Prefix(this)" class="mono" type="number" min="0" max="30" value="${ipv4_prefix.value ?? undefined}" num="${id_num}"/>
+                <label for="toggle-dhcp" class="toggle-dhcp-prelabel gap-above">DHCP Client</label>
+                <input name="toggle-dhcp" onclick="toggleDhcpClient(this,'${mac}')" class="toggle-dhcp" type="checkbox" ${dhcp_enabled ? "checked" : ""}/>
+                <label for="toggle-dhcp"class="toggle-dhcp-postlabel"></label>
             </form>
         </div>`
         :
@@ -122,20 +125,7 @@ const pingTool = (device: Device) => {
     `
 }
 
-// TODO: implement this as a feature on interface
-const dhcpClientTool = () => {
-    return `
-    <div class="config-option">
-        <input id="dhcp-dropdown" class="option-dropdown" type="checkbox">
-        <label for="dhcp-dropdown" class="option-dropdown-label">DHCP Client</label>
-        <div class="option-dropdown-contents">
-            <button type="toggle" onclick="toggleDhcpClient()">Toggle DHCP Client</button>
-        </div>
-    </div>
-    `
-}
-
-const dhcpServerTool = (network_address: Ipv4Address, prefix: Ipv4Prefix, router: Ipv4Address) => {
+const dhcpServerTool = (network_address: Readonly<Ipv4Address>, prefix: Readonly<Ipv4Prefix>, router: Readonly<Ipv4Address>) => {
     return `
     <div class="config-option">
         <input id="dhcp-server-dropdown" class="option-dropdown" type="checkbox">
@@ -191,7 +181,7 @@ export function displayInfo(device: Device) {
         configurePanel.innerHTML += interfaceConfig(idx, l2inf.mac, InfLayer.L2, l2inf.isActive());
     }
     for (let [idx, l3inf] of device.l3infs.entries()) {
-        configurePanel.innerHTML += interfaceConfig(idx, l3inf.mac, InfLayer.L3, l3inf.isActive(), l3inf.ipv4, l3inf.ipv4_prefix);
+        configurePanel.innerHTML += interfaceConfig(idx, l3inf.mac, InfLayer.L3, l3inf.isActive(), l3inf.ipv4, l3inf.ipv4_prefix, device.dhcpEnabled(l3inf.mac));
     }
     if (device.l3infs.length > 0) {
         // add routing section and ping section
@@ -202,10 +192,7 @@ export function displayInfo(device: Device) {
         configurePanel.innerHTML += pingTool(device);
         prevent_default_form_ids.push('execute-ping-form');
 
-        if (device.device_type == DeviceType.PC) {
-            configurePanel.innerHTML += dhcpClientTool();
-        }
-        else if (isRouter(device)) {
+        if (isRouter(device)) {
             configurePanel.innerHTML += dhcpServerTool(device._dhcp_server.network, device._dhcp_server.prefix, device._dhcp_server.router);
         }
     }
@@ -526,19 +513,17 @@ function ipv4PrefixFromInputEle(ele: HTMLInputElement): Ipv4Prefix {
     return new Ipv4Prefix(prefix);
 }
 
-function isPC(dev: Device): dev is PersonalComputer {
-    return (dev as PersonalComputer).toggleDhcpClient() !== undefined;
-}
-
 function isRouter(dev: Device): dev is Router {
     return (dev as Router)._dhcp_server !== undefined;
 }
 
-function toggleDhcpClient() {
+function toggleDhcpClient(ele: HTMLInputElement, mac_string: string) {
+    const mac = MacAddress.parseString(mac_string);
     const device = focusedDevice;
-    if (isPC(device)) {
-        device.toggleDhcpClient();
-    }
+
+    const result = device.toggleDhcpClient(mac);
+    // XOR the checkbox value and the result value to get the new checkbox value
+    ele.checked !== result;
 } (<any>window).toggleDhcpClient = toggleDhcpClient;
 
 function dhcpServerUpdateNetwork(ele: HTMLInputElement) {

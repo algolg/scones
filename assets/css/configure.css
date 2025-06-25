@@ -106,6 +106,19 @@
     margin-top: 8px;
 }
 
+.toggle-dhcp-prelabel {
+    display: block;
+}
+input[name=toggle-dhcp] {
+    display: inline-block;
+}
+input[name=toggle-dhcp] ~ .toggle-dhcp-postlabel::before {
+    content: 'Inactive'
+}
+input[name=toggle-dhcp]:checked ~ .toggle-dhcp-postlabel::before {
+    content: 'Started'
+}
+
 .config-table {
     width: 100%;
     max-width: 100%;

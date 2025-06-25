@@ -132,14 +132,14 @@ export class DeviceID {
         this.value = value;
     }
     static rand() {
-        return Math.floor(Math.random() * (this.max - this.min)) + this.min;
+        return Math.floor(Math.random() * (this.max - this.min + 1)) + this.min;
     }
     compare(other) {
         return this.value - other.value;
     }
 }
 DeviceID.min = 100000000;
-DeviceID.max = 1000000000;
+DeviceID.max = 999999999;
 class Uint8 {
     constructor(value) {
         this._value = value & 0xFF;

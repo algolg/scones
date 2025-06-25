@@ -150,7 +150,7 @@ export interface Identifier {
 export class DeviceID implements Identifier {
     readonly value: number;
     private static readonly min: number = 100000000;
-    private static readonly max: number = 1000000000;
+    private static readonly max: number = 999999999;
 
     public constructor(value: number) {
         value = value > DeviceID.max ? DeviceID.max : value < DeviceID.min ? DeviceID.min : Math.trunc(value);
@@ -158,7 +158,7 @@ export class DeviceID implements Identifier {
     }
 
     public static rand(): number {
-        return Math.floor(Math.random() * (this.max - this.min)) + this.min;
+        return Math.floor(Math.random() * (this.max - this.min + 1)) + this.min;
     }
 
     public compare(other: DeviceID): number {

@@ -46,14 +46,23 @@ export class DhcpServer {
     get enabled() {
         return this._enabled;
     }
+    get network() {
+        return this._network;
+    }
     set network(network) {
         this._network = network;
+    }
+    get prefix() {
+        return this._prefix;
     }
     set prefix(prefix) {
         this._prefix = prefix;
         if (this._network) {
             this._network = this._network.and(this._prefix);
         }
+    }
+    get router() {
+        return this._router;
     }
     set router(default_router) {
         this._router = default_router;
@@ -190,7 +199,7 @@ export class DhcpServer {
 DhcpServer.PORT = 67;
 export class DhcpClient {
     constructor(lib, setIpAndPrefix, setDefaultGateway) {
-        this._enabled = false;
+        this._enabled = new Map();
         this.active_sockets = new Map();
         this.killed = new Set();
         this.POLL_LEN = 5000;
@@ -198,33 +207,46 @@ export class DhcpClient {
         this.setIpAndPrefix = setIpAndPrefix;
         this.setDefaultGateway = setDefaultGateway;
     }
-    get enabled() {
-        return this._enabled;
+    enabled(mac) {
+        const mac_str = mac.toString();
+        if (this._enabled.has(mac_str)) {
+            return this._enabled.get(mac_str);
+        }
+        return false;
     }
     disable(egress_mac) {
-        this._enabled = false;
-        this.killed.add(egress_mac);
         const mac_str = egress_mac.toString();
+        this._enabled.set(mac_str, false);
+        this.killed.add(mac_str);
         if (this.active_sockets.has(mac_str)) {
-            this.active_sockets.get(mac_str).kill();
+            const sock = this.active_sockets.get(mac_str);
+            sock.kill();
+            this.lib.closeUDP(sock);
         }
         setTimeout(() => {
-            this.killed.delete(egress_mac);
+            this.killed.delete(mac_str);
         }, this.POLL_LEN);
     }
     // should probably split this into functions...
     async enable(egress_mac) {
-        this._enabled = true;
+        this._enabled.set(egress_mac.toString(), true);
         let found = false;
         const mac_str = egress_mac.toString();
         // TODO: should link-local address be used?
         this.setIpAndPrefix(egress_mac, new Ipv4Address([0, 0, 0, 0]), new Ipv4Prefix(0));
+        // TODO: confirm and resolve if needed
         // all sockets for a single device are identical -->
         // this will cause issues if DHCP is enabled simultaneously on multiple interfaces
-        const sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpClient.PORT);
-        this.active_sockets.set(mac_str, sock);
+        let sock;
+        if (this.active_sockets.has(mac_str)) {
+            sock = this.active_sockets.get(mac_str);
+        }
+        else {
+            sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpClient.PORT);
+            this.active_sockets.set(mac_str, sock);
+        }
         this.lib.bindUDP(sock);
-        while (!found && !this.killed.has(egress_mac)) {
+        while (!found && !this.killed.has(mac_str)) {
             const xid = Math.trunc(Math.random() * (2 ** 32));
             const discoverPayload = DhcpPayload.dhcpDiscover(xid, egress_mac);
             const discoverFrame = this.createFrame(discoverPayload, egress_mac);
@@ -240,7 +262,7 @@ export class DhcpClient {
                 let acknowledged = false;
                 const requestPayload = DhcpPayload.dhcpRequest(xid, egress_mac, offer_payload.siaddr);
                 const requestFrame = this.createFrame(requestPayload, egress_mac);
-                while (!acknowledged && !this.killed.has(egress_mac)) {
+                while (!acknowledged && !this.killed.has(mac_str)) {
                     console.log(`DHCP-CLT: SENDING REQUEST`);
                     this.lib.sendFrame(requestFrame, egress_mac);
                     const ack = await sock.receive(this.POLL_LEN);
@@ -279,6 +301,7 @@ export class DhcpClient {
                                 const router = ack_payload.options.get(DhcpOptions.ROUTER)[1];
                                 this.setDefaultGateway(new Ipv4Address([router[0], router[1], router[2], router[3]]));
                             }
+                            this._enabled.delete(mac_str);
                         }
                     }
                 }

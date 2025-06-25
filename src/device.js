@@ -62,6 +62,13 @@ export class Device {
             }
             setTimeout(() => this.getInfFromMac(egress_mac)?.send(frame), 10);
         }, (socket) => { this._sockets.addIcmpSocket(socket); }, (socket) => { this._sockets.deleteIcmpSocket(socket); }, (socket) => { this._sockets.addUdpSocket(socket); }, (socket) => { this._sockets.deleteUdpSocket(socket); });
+        this._dhcp_client = new DhcpClient(this._lib, (inf_mac, ipv4_address, prefix) => {
+            const inf = this.getL3InfFromMac(inf_mac);
+            if (inf) {
+                inf.ipv4.value = [ipv4_address.value[0], ipv4_address.value[1], ipv4_address.value[2], ipv4_address.value[3]];
+                inf.ipv4_prefix.value = prefix.value;
+            }
+        }, (default_gateway) => { this.default_gateway = default_gateway; });
     }
     static getList() {
         return this.DeviceList;
@@ -159,6 +166,17 @@ export class Device {
     }
     get l3infs() {
         return this._l3infs;
+    }
+    set default_gateway(gateway) {
+        const quad_zero = new Ipv4Address([0, 0, 0, 0]);
+        const zero_prefix = new Ipv4Prefix(0);
+        const try_prev_default_gateway = this._routing_table.get(quad_zero);
+        if (try_prev_default_gateway) {
+            for (const route of try_prev_default_gateway) {
+                this._routing_table.delete(quad_zero, zero_prefix, route[0], route[1], 1);
+            }
+        }
+        this._routing_table.set(quad_zero, zero_prefix, gateway, this._l3infs[0].ipv4, 1);
     }
     getId() {
         return this._id;
@@ -520,6 +538,9 @@ export class Device {
     logError(error) {
         console.log(error);
     }
+    /**
+     * Applications
+     */
     ping(dest_ipv4, count = Number.MAX_VALUE, ttl = 255, success_func = this.logPing, error_func = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
@@ -574,6 +595,22 @@ export class Device {
         }
         return undefined;
     }
+    toggleDhcpClient(mac) {
+        if (!this._l3infs.some((x) => x.mac.compare(mac) == 0)) {
+            return false;
+        }
+        if (this._dhcp_client.enabled(mac)) {
+            this._dhcp_client.disable(mac);
+            return true;
+        }
+        else {
+            this._dhcp_client.enable(mac);
+            return true;
+        }
+    }
+    dhcpEnabled(mac) {
+        return this._dhcp_client.enabled(mac);
+    }
 }
 Device.DeviceList = new IdentifiedList();
 export class Libraries {
@@ -618,23 +655,6 @@ export class PersonalComputer extends Device {
         this._l3infs.push(new L3Interface(this._network_controller, 0));
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
-        this._dhcp_client = new DhcpClient(this._lib, (inf_mac, ipv4_address, prefix) => {
-            const inf = this.getL3InfFromMac(inf_mac);
-            if (inf) {
-                inf.ipv4.value = [ipv4_address.value[0], ipv4_address.value[1], ipv4_address.value[2], ipv4_address.value[3]];
-                inf.ipv4_prefix.value = prefix.value;
-            }
-        }, (default_gateway) => { this.default_gateway = default_gateway; });
-    }
-    // TODO: remove this function, delegate to interfaces
-    toggleDhcpClient() {
-        const mac = this._l3infs[0].mac;
-        if (this._dhcp_client.enabled) {
-            this._dhcp_client.disable(mac);
-        }
-        else {
-            this._dhcp_client.enable(mac);
-        }
     }
     set ipv4(ipv4) {
         this._l3infs[0].ipv4.value = ipv4;
@@ -648,17 +668,6 @@ export class PersonalComputer extends Device {
     }
     get inf() {
         return this._l3infs[0];
-    }
-    set default_gateway(gateway) {
-        const quad_zero = new Ipv4Address([0, 0, 0, 0]);
-        const zero_prefix = new Ipv4Prefix(0);
-        const try_prev_default_gateway = this._routing_table.get(quad_zero);
-        if (try_prev_default_gateway) {
-            for (const route of try_prev_default_gateway) {
-                this._routing_table.delete(quad_zero, zero_prefix, route[0], route[1], 1);
-            }
-        }
-        this._routing_table.set(quad_zero, zero_prefix, gateway, this._l3infs[0].ipv4, 1);
     }
 }
 export class Switch extends Device {

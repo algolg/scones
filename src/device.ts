@@ -35,7 +35,7 @@ export abstract class Device implements IdentifiedItem {
     public readonly device_type: DeviceType;
     public coords: [number, number];
     protected _allow_forwarding: boolean = true;
-
+    protected readonly _dhcp_client: DhcpClient;
     private static DeviceList = new IdentifiedList<Device>();
 
     public constructor(device_type: DeviceType) {
@@ -67,6 +67,19 @@ export abstract class Device implements IdentifiedItem {
             (socket: Socket<UdpDatagram>) => { this._sockets.addUdpSocket(socket); },
             (socket: Socket<UdpDatagram>) => { this._sockets.deleteUdpSocket(socket); },
         );
+
+        this._dhcp_client = new DhcpClient(
+            this._lib,
+            (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => {
+                const inf = this.getL3InfFromMac(inf_mac);
+                if (inf) {
+                    inf.ipv4.value = [ipv4_address.value[0], ipv4_address.value[1], ipv4_address.value[2], ipv4_address.value[3]];
+                    inf.ipv4_prefix.value = prefix.value;
+                }
+            },
+            (default_gateway: Ipv4Address) => { this.default_gateway = default_gateway; },
+        )
+
     }
 
     public static getList(): ReadonlyArray<Device> {
@@ -182,6 +195,20 @@ export abstract class Device implements IdentifiedItem {
 
     public get l3infs(): L3Interface[] {
         return this._l3infs;
+    }
+
+    public set default_gateway(gateway: Ipv4Address) {
+        const quad_zero = new Ipv4Address([0,0,0,0]);
+        const zero_prefix = new Ipv4Prefix(0);
+
+        const try_prev_default_gateway = this._routing_table.get(quad_zero);
+        if (try_prev_default_gateway) {
+            for (const route of try_prev_default_gateway) {
+                this._routing_table.delete(quad_zero, zero_prefix, route[0], route[1], 1);
+            }
+        }
+
+        this._routing_table.set(quad_zero, zero_prefix, gateway, this._l3infs[0].ipv4, 1);
     }
 
     public getId(): Readonly<DeviceID> {
@@ -587,6 +614,10 @@ export abstract class Device implements IdentifiedItem {
         console.log(error)
     }
 
+    /**
+     * Applications
+     */
+
     public ping(dest_ipv4: Ipv4Address, count: number = Number.MAX_VALUE, ttl: number = 255, success_func: (IcmpDatagram, Ipv4Packet) => void = this.logPing, error_func: (string) => void = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ')) + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
@@ -648,6 +679,24 @@ export abstract class Device implements IdentifiedItem {
             return top;
         }
         return undefined;
+    }
+
+    public toggleDhcpClient(mac: MacAddress): boolean {
+        if (!this._l3infs.some((x) => x.mac.compare(mac) == 0)) {
+            return false;
+        }
+        if (this._dhcp_client.enabled(mac)) {
+            this._dhcp_client.disable(mac);
+            return true;
+        }
+        else {
+            this._dhcp_client.enable(mac);
+            return true;
+        }
+    }
+
+    public dhcpEnabled(mac: MacAddress): boolean {
+        return this._dhcp_client.enabled(mac);
     }
 }
 
@@ -714,7 +763,6 @@ export class NetworkController {
 
 export class PersonalComputer extends Device {
     protected readonly _loopback: VirtualL3Interface = VirtualL3Interface.newLoopback(this._network_controller);
-    protected readonly _dhcp_client: DhcpClient;
 
     public constructor() {
         super(DeviceType.PC);
@@ -724,28 +772,6 @@ export class PersonalComputer extends Device {
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
 
-        this._dhcp_client = new DhcpClient(
-            this._lib,
-            (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => {
-                const inf = this.getL3InfFromMac(inf_mac);
-                if (inf) {
-                    inf.ipv4.value = [ipv4_address.value[0], ipv4_address.value[1], ipv4_address.value[2], ipv4_address.value[3]];
-                    inf.ipv4_prefix.value = prefix.value;
-                }
-            },
-            (default_gateway: Ipv4Address) => { this.default_gateway = default_gateway; },
-        )
-    }
-
-    // TODO: remove this function, delegate to interfaces
-    public toggleDhcpClient() {
-        const mac = this._l3infs[0].mac
-        if (this._dhcp_client.enabled) {
-            this._dhcp_client.disable(mac);
-        }
-        else {
-            this._dhcp_client.enable(mac);
-        }
     }
 
     public set ipv4(ipv4: [number, number, number, number]) {
@@ -763,20 +789,6 @@ export class PersonalComputer extends Device {
 
     public get inf(): L3Interface {
         return this._l3infs[0];
-    }
-
-    public set default_gateway(gateway: Ipv4Address) {
-        const quad_zero = new Ipv4Address([0,0,0,0]);
-        const zero_prefix = new Ipv4Prefix(0);
-
-        const try_prev_default_gateway = this._routing_table.get(quad_zero);
-        if (try_prev_default_gateway) {
-            for (const route of try_prev_default_gateway) {
-                this._routing_table.delete(quad_zero, zero_prefix, route[0], route[1], 1);
-            }
-        }
-
-        this._routing_table.set(quad_zero, zero_prefix, gateway, this._l3infs[0].ipv4, 1);
     }
 }
 

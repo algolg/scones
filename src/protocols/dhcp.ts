@@ -42,8 +42,16 @@ export class DhcpServer {
         return this._enabled;
     }
 
+    public get network(): Readonly<Ipv4Address> {
+        return this._network;
+    }
+
     public set network(network: Ipv4Address) {
         this._network = network;
+    }
+
+    public get prefix(): Readonly<Ipv4Prefix> {
+        return this._prefix;
     }
 
     public set prefix(prefix: Ipv4Prefix) {
@@ -51,6 +59,10 @@ export class DhcpServer {
         if (this._network) {
             this._network = this._network.and(this._prefix);
         }
+    }
+
+    public get router(): Readonly<Ipv4Address> {
+        return this._router;
     }
 
     public set router(default_router: Ipv4Address) {
@@ -210,13 +222,13 @@ export class DhcpServer {
 
 export class DhcpClient {
     private readonly lib: Libraries;
-    private _enabled: boolean = false;
+    private _enabled: Map<string,boolean> = new Map();
     private setIpAndPrefix: (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => void;
     private setDefaultGateway: (default_gateway: Ipv4Address) => void;
 
     private active_sockets = new Map<string, Socket<UdpDatagram>>();
 
-    private killed = new Set<MacAddress>();
+    private killed = new Set<string>();
 
     private readonly POLL_LEN = 5000;
     public static readonly PORT = 68;
@@ -231,39 +243,52 @@ export class DhcpClient {
         this.setDefaultGateway = setDefaultGateway;
     }
 
-    public get enabled(): boolean {
-        return this._enabled;
+    public enabled(mac: MacAddress): boolean {
+        const mac_str = mac.toString();
+        if (this._enabled.has(mac_str)) {
+            return this._enabled.get(mac_str);
+        }
+        return false;
     }
 
     public disable(egress_mac: MacAddress) {
-        this._enabled = false;
-        this.killed.add(egress_mac);
         const mac_str = egress_mac.toString();
+        this._enabled.set(mac_str, false);
+        this.killed.add(mac_str);
         if (this.active_sockets.has(mac_str)) {
-            this.active_sockets.get(mac_str).kill();
+            const sock = this.active_sockets.get(mac_str);
+            sock.kill();
+            this.lib.closeUDP(sock);
         }
 
         setTimeout(() => {
-            this.killed.delete(egress_mac);
+            this.killed.delete(mac_str);
         }, this.POLL_LEN);
     }
 
     // should probably split this into functions...
     public async enable(egress_mac: MacAddress) {
-        this._enabled = true;
+        this._enabled.set(egress_mac.toString(), true);
         let found = false;
         const mac_str = egress_mac.toString();
 
         // TODO: should link-local address be used?
         this.setIpAndPrefix(egress_mac, new Ipv4Address([0,0,0,0]), new Ipv4Prefix(0));
 
+        // TODO: confirm and resolve if needed
         // all sockets for a single device are identical -->
         // this will cause issues if DHCP is enabled simultaneously on multiple interfaces
-        const sock: Socket<UdpDatagram> = Socket.udpSocket(Ipv4Address.broadcast, DhcpClient.PORT);
-        this.active_sockets.set(mac_str, sock);
+        let sock: Socket<UdpDatagram>;
+        if (this.active_sockets.has(mac_str)) {
+            sock = this.active_sockets.get(mac_str);
+        }
+        else {
+            sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpClient.PORT);
+            this.active_sockets.set(mac_str, sock);
+        }
 
         this.lib.bindUDP(sock);
-        while (!found && !this.killed.has(egress_mac)) {
+        while (!found && !this.killed.has(mac_str)) {
             const xid = Math.trunc(Math.random() * (2**32));
 
             const discoverPayload: DhcpPayload = DhcpPayload.dhcpDiscover(xid, egress_mac);
@@ -283,7 +308,7 @@ export class DhcpClient {
                 const requestPayload: DhcpPayload = DhcpPayload.dhcpRequest(xid, egress_mac, offer_payload.siaddr);
                 const requestFrame: Frame = this.createFrame(requestPayload, egress_mac);
 
-                while (!acknowledged && !this.killed.has(egress_mac)) {
+                while (!acknowledged && !this.killed.has(mac_str)) {
                     console.log(`DHCP-CLT: SENDING REQUEST`)
                     this.lib.sendFrame(requestFrame, egress_mac);
                     const ack = await sock.receive(this.POLL_LEN);
@@ -326,6 +351,7 @@ export class DhcpClient {
                                 const router: Uint8Array = ack_payload.options.get(DhcpOptions.ROUTER)[1];
                                 this.setDefaultGateway(new Ipv4Address([router[0], router[1], router[2], router[3]]));
                             }
+                            this._enabled.delete(mac_str);
                         }
                     }
                 }
