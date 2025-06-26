@@ -171,7 +171,6 @@ export function resetConfigurePanel() {
 }
 
 export function displayInfo(device: Device) {
-    // configurePanel.setAttribute("current", device.getId().value.toString());
     clearConfigurePanel();
     
     let prevent_default_form_ids: string[] = [];
@@ -246,7 +245,8 @@ export function displayFrames() {
                 const src_coords = frame.sender_coords();
                 const dest_inf = InfMatrix.getNeighborInf(frame.egress_mac);
                 if (src_coords === undefined || dest_inf === undefined) {
-                    throw "invalid frame";
+                    console.error("invalid frame");
+                    continue;
                 }
                 frame_coords = [
                     (src_coords[0] + dest_inf.coords[0]) / 2,

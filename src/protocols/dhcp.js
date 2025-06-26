@@ -201,8 +201,14 @@ export class DhcpClient {
     constructor(lib, setIpAndPrefix, setDefaultGateway) {
         this._enabled = new Map();
         this.active_sockets = new Map();
-        this.killed = new Set();
+        //   MAC
+        this.active_offers = new Map();
+        //  MAC
+        this.xids = new Map();
+        // XID   ,  MAC   , expiration time
+        this.killed = new Set(); // MACs
         this.POLL_LEN = 5000;
+        this.OFFER_TIMEOUT = 30000;
         this.lib = lib;
         this.setIpAndPrefix = setIpAndPrefix;
         this.setDefaultGateway = setDefaultGateway;
@@ -223,15 +229,24 @@ export class DhcpClient {
             sock.kill();
             this.lib.closeUDP(sock);
         }
+        if (this.active_offers.has(mac_str)) {
+            this.active_offers.delete(mac_str);
+        }
         setTimeout(() => {
             this.killed.delete(mac_str);
         }, this.POLL_LEN);
     }
-    // should probably split this into functions...
     async enable(egress_mac) {
-        this._enabled.set(egress_mac.toString(), true);
-        let found = false;
         const mac_str = egress_mac.toString();
+        // if clients are identified by xid instead of MAC, an interface's client
+        // wouldn't have to wait for the previous client to be killed before
+        // opening a new one.
+        // this would make the toggle function inefficient though
+        // (no simple [interface MAC] to [DHCP client] mapping).
+        while (this.killed.has(mac_str)) {
+            await wait(1000);
+        }
+        this._enabled.set(egress_mac.toString(), true);
         // TODO: should link-local address be used?
         this.setIpAndPrefix(egress_mac, new Ipv4Address([0, 0, 0, 0]), new Ipv4Prefix(0));
         // TODO: confirm and resolve if needed
@@ -246,70 +261,122 @@ export class DhcpClient {
             this.active_sockets.set(mac_str, sock);
         }
         this.lib.bindUDP(sock);
-        while (!found && !this.killed.has(mac_str)) {
-            const xid = Math.trunc(Math.random() * (2 ** 32));
-            const discoverPayload = DhcpPayload.dhcpDiscover(xid, egress_mac);
-            const discoverFrame = this.createFrame(discoverPayload, egress_mac);
-            console.log(`DHCP-CLT: SENDING DISCOVER`);
-            this.lib.sendFrame(discoverFrame, egress_mac);
-            const resp = await sock.receive(this.POLL_LEN);
-            if (resp && resp[0].data) {
-                const offer_payload = DhcpPayload.parse(resp[0].data);
-                if (offer_payload.op != OP.BOOTREPLY || offer_payload.xid != xid) {
-                    continue;
-                }
-                found = true;
-                let acknowledged = false;
-                const requestPayload = DhcpPayload.dhcpRequest(xid, egress_mac, offer_payload.siaddr);
-                const requestFrame = this.createFrame(requestPayload, egress_mac);
-                while (!acknowledged && !this.killed.has(mac_str)) {
+        setTimeout(() => {
+            this.listen(egress_mac);
+        }, 0);
+        while (!this.killed.has(mac_str)) {
+            const now = performance.now();
+            // if there are no stored offers, then the DHCP server must be discovered
+            if (!this.active_offers.has(mac_str) || this.active_offers.get(mac_str).length == 0) {
+                const xid = Math.trunc(Math.random() * (2 ** 32));
+                this.xids.set(xid, [mac_str, performance.now() + this.POLL_LEN]);
+                const discoverPayload = DhcpPayload.dhcpDiscover(xid, egress_mac);
+                const discoverFrame = this.createFrame(discoverPayload, egress_mac);
+                console.log(`DHCP-CLT: SENDING DISCOVER`);
+                this.lib.sendFrame(discoverFrame, egress_mac);
+                await sock.wait(this.POLL_LEN);
+                await wait(100);
+            }
+            else {
+                const offers = this.active_offers.get(mac_str);
+                const offer = offers[0];
+                // if there is an unexpired offer, then send a request accordingly
+                if (offer[1] > performance.now()) {
+                    const requestPayload = DhcpPayload.dhcpRequest(offer[0].xid, egress_mac, offer[0].siaddr);
+                    const requestFrame = this.createFrame(requestPayload, egress_mac);
                     console.log(`DHCP-CLT: SENDING REQUEST`);
                     this.lib.sendFrame(requestFrame, egress_mac);
-                    const ack = await sock.receive(this.POLL_LEN);
-                    if (ack && ack[0].data) {
-                        const ack_payload = DhcpPayload.parse(ack[0].data);
-                        if (ack_payload.op == OP.BOOTREPLY &&
-                            ack_payload.xid == xid &&
-                            ack_payload.options.has(DhcpOptions.MESSAGE_TYPE) &&
-                            ack_payload.options.get(DhcpOptions.MESSAGE_TYPE)[1][0] == DhcpMessageType.DHCPACK &&
-                            ack_payload.options.has(DhcpOptions.SUBNET_MASK) &&
-                            ack_payload.options.get(DhcpOptions.SUBNET_MASK)[0] == 4) {
-                            acknowledged = true;
-                            const subnet_mask = ack_payload.options.get(DhcpOptions.SUBNET_MASK)[1];
-                            // TODO: put this in its own function
-                            let prefix_len = 0;
-                            for (const octet of subnet_mask) {
-                                const host_bits = Math.log2(0xff - octet + 1);
-                                if (octet == 0xff) {
-                                    prefix_len += 8;
-                                }
-                                else if (octet == 0x00) {
-                                    break;
-                                }
-                                else if (octet < 0xff && Number.isInteger(host_bits)) {
-                                    prefix_len += 8 - host_bits;
-                                    break;
-                                }
-                                // on error, set prefix length to 32
-                                else {
-                                    prefix_len = 32;
-                                    break;
-                                }
-                            }
-                            this.setIpAndPrefix(egress_mac, ack_payload.yiaddr, new Ipv4Prefix(prefix_len));
-                            if (ack_payload.options.has(DhcpOptions.ROUTER) && ack_payload.options.get(DhcpOptions.ROUTER)[0] == 4) {
-                                const router = ack_payload.options.get(DhcpOptions.ROUTER)[1];
-                                this.setDefaultGateway(new Ipv4Address([router[0], router[1], router[2], router[3]]));
-                            }
-                            this._enabled.delete(mac_str);
-                        }
-                    }
+                    await sock.wait(this.POLL_LEN);
+                    await wait(100);
+                }
+                // if the top request is expired, then delete the expired offers
+                // (active_offers is FIFO)
+                else {
+                    this.active_offers.delete(mac_str);
                 }
             }
         }
-        this.lib.closeUDP(sock);
-        if (this.active_sockets.has(mac_str)) {
-            this.active_sockets.delete(mac_str);
+    }
+    async listen(egress_mac) {
+        const mac_str = egress_mac.toString();
+        if (!this.active_sockets.has(mac_str) || !this._enabled.has(mac_str)) {
+            console.error(`Error: DHCP client not enabled for interface with MAC ${mac_str}`);
+        }
+        const sock = this.active_sockets.get(mac_str);
+        while (this._enabled.get(mac_str) && !this.killed.has(mac_str)) {
+            const resp = await sock.receive(this.POLL_LEN);
+            if (resp && resp[0].data) {
+                this.processResponse(resp[0].data, egress_mac, mac_str);
+            }
+        }
+    }
+    processResponse(data, egress_mac, mac_str) {
+        const response = DhcpPayload.parse(data);
+        let xid_record = this.xids.get(response.xid);
+        const now = performance.now();
+        if (response.op != OP.BOOTREPLY ||
+            !response.options.has(DhcpOptions.MESSAGE_TYPE) ||
+            !(xid_record = this.xids.get(response.xid)) ||
+            xid_record[1] <= now ||
+            xid_record[0] !== mac_str ||
+            egress_mac.value.some((val, idx) => val != response.chaddr[idx])) {
+            return;
+        }
+        const message_type = response.options.get(DhcpOptions.MESSAGE_TYPE)[1][0];
+        if (message_type == DhcpMessageType.DHCPOFFER) {
+            if (!this.active_offers.has(mac_str)) {
+                this.active_offers.set(mac_str, []);
+            }
+            this.active_offers.get(mac_str).push([response, now + this.OFFER_TIMEOUT]);
+        }
+        else if (message_type == DhcpMessageType.DHCPACK &&
+            this.active_offers.has(mac_str) &&
+            this.active_offers.get(mac_str).length > 0 &&
+            response.options.has(DhcpOptions.SUBNET_MASK) &&
+            response.options.get(DhcpOptions.SUBNET_MASK)[0] == 4) {
+            let selected_offer;
+            const relevant_offers = this.active_offers.get(mac_str);
+            for (let i = 0; i < relevant_offers.length; i++) {
+                if (relevant_offers[i][1] > now && relevant_offers[i][0].xid === response.xid) {
+                    selected_offer = relevant_offers[i];
+                    break;
+                }
+            }
+            if (selected_offer) {
+                this.active_offers.delete(mac_str);
+                // set IP address, prefix, etc.
+                this.setNetworkInfo(selected_offer[0], egress_mac);
+                // disable the DHCP client
+                this.disable(egress_mac);
+                this.xids.delete(response.xid);
+            }
+        }
+    }
+    setNetworkInfo(ack_payload, egress_mac) {
+        const subnet_mask = ack_payload.options.get(DhcpOptions.SUBNET_MASK)[1];
+        let prefix_len = 0;
+        for (const octet of subnet_mask) {
+            const host_bits = Math.log2(0xff - octet + 1);
+            if (octet == 0xff) {
+                prefix_len += 8;
+            }
+            else if (octet == 0x00) {
+                break;
+            }
+            else if (octet < 0xff && Number.isInteger(host_bits)) {
+                prefix_len += 8 - host_bits;
+                break;
+            }
+            // on error, set prefix length to 32
+            else {
+                prefix_len = 32;
+                break;
+            }
+        }
+        this.setIpAndPrefix(egress_mac, ack_payload.yiaddr, new Ipv4Prefix(prefix_len));
+        if (ack_payload.options.has(DhcpOptions.ROUTER) && ack_payload.options.get(DhcpOptions.ROUTER)[0] == 4) {
+            const router = ack_payload.options.get(DhcpOptions.ROUTER)[1];
+            this.setDefaultGateway(new Ipv4Address([router[0], router[1], router[2], router[3]]));
         }
     }
     createFrame(dhcp_payload, client_mac) {
@@ -442,4 +509,7 @@ DhcpPayload._lengths = [
 ];
 DhcpPayload._bytes_before_sname = 44;
 DhcpPayload._bytes_before_data = 240; // TODO: verify this constant
+async function wait(ns) {
+    return new Promise((x) => setTimeout((x), ns));
+}
 //# sourceMappingURL=dhcp.js.map

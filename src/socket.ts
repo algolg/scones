@@ -39,26 +39,42 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
         return this._hits;
     }
 
+    public async wait(timeout_ms?: number): Promise<void> {
+        return new Promise((resolve) => {
+            const start = performance.now();
+
+            const interval = setInterval(() => {
+                const data_received = this._matched.length > 0;
+                const timed_out = timeout_ms ? (performance.now() - start) >= timeout_ms - POLLING_INTERVAL : false;
+                
+                if (data_received || timed_out || this._killed) {
+                    clearInterval(interval);
+                    resolve();
+                }
+
+            }, POLLING_INTERVAL);
+        });
+    }
+
     public async receive(timeout_ms?: number): Promise<[T, Ipv4Packet]> {
         return new Promise((resolve) => {
             const start = performance.now();
-            let num_matched = this._matched.length;
 
             const interval = setInterval(() => {
-                const data_received = this._matched.length > num_matched;
+                const data_received = this._matched.length > 0;
                 const timed_out = timeout_ms ? (performance.now() - start) >= timeout_ms - POLLING_INTERVAL : false;
                 
                 if (data_received || timed_out || this._killed) {
                     clearInterval(interval);
                 }
                 if (data_received) {
-                    resolve(this.matched_top);
+                    const match = this._matched.shift();
+                    resolve(match);
                 }
                 else if (timed_out || this._killed) {
                     resolve(undefined);
                 }
 
-                num_matched = this._matched.length;
             }, POLLING_INTERVAL);
         });
     }
@@ -163,4 +179,11 @@ export class SocketTable {
         this._udp_sockets.delete(socket);
     }
     // and the others
+
+    public clear() {
+        this._ipv4_sockets.clear();
+        this._icmp_sockets.clear();
+        this._udp_sockets.clear();
+        // and the others
+    }
 }

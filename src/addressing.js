@@ -177,7 +177,7 @@ export class MacAddress {
                 Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256),
                 Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256)
             ];
-            if (!macArr.every((x) => x == 0xFF || x == 0x00)) {
+            if (!macArr.every((x) => x == 0x00) && !macArr.every((x) => x == 0xFF)) {
                 valid = true;
             }
         }

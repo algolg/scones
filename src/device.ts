@@ -154,10 +154,14 @@ export abstract class Device implements IdentifiedItem {
     public static deleteDevice(x_coord: number, y_coord: number): boolean {
         const device = this.getDevice(x_coord, y_coord);
         if (device !== undefined) {
+            device._sockets.clear();
             for (let l2inf of device._l2infs) {
                 InfMatrix.delete(l2inf);
             }
             for (let l3inf of device._l3infs) {
+                if (device.dhcpEnabled(l3inf.mac)) {
+                    device._dhcp_client.disable(l3inf.mac);
+                }
                 InfMatrix.delete(l3inf);
             }
             Device.DeviceList.delete(device);
