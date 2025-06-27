@@ -341,6 +341,9 @@ export class Ipv4Prefix {
         let arr = spread([Math.pow(2, 32 - this._ipv4_prefix) - 1, 32]);
         return new Ipv4Address([255 - arr[0], 255 - arr[1], 255 - arr[2], 255 - arr[3]]);
     }
+    toString() {
+        return this._ipv4_prefix.toString();
+    }
 }
 function main() {
     let test = new Uint8(10);

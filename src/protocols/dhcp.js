@@ -32,9 +32,7 @@ var DhcpMessageType;
 export class DhcpServer {
     constructor(lib) {
         this._enabled = false;
-        this._network = null;
-        this._prefix = null;
-        this._router = null;
+        this._records = new Map();
         this.offers_given_mac = new Map();
         // MAC     IPv4
         this.offers_given_ipv4 = new Set();
@@ -46,26 +44,26 @@ export class DhcpServer {
     get enabled() {
         return this._enabled;
     }
-    get network() {
-        return this._network;
+    get records() {
+        let out = [];
+        for (const [key, val] of this._records.entries()) {
+            out.push([Ipv4Address.parseString(key), val[0], val[1]]);
+        }
+        return out;
     }
-    set network(network) {
-        this._network = network;
-    }
-    get prefix() {
-        return this._prefix;
-    }
-    set prefix(prefix) {
-        this._prefix = prefix;
-        if (this._network) {
-            this._network = this._network.and(this._prefix);
+    addRecord(network_address, prefix, router_address) {
+        const initial_record_len = this._records.size;
+        // consider adding a check to overwrite overlapping records
+        this._records.set(network_address.and(prefix).toString(), [prefix, router_address]);
+        if (initial_record_len == 0 && this._records.size == 1) {
+            this.enable();
         }
     }
-    get router() {
-        return this._router;
-    }
-    set router(default_router) {
-        this._router = default_router;
+    delRecord(network_address) {
+        this._records.delete(network_address.toString());
+        if (this._records.size == 0) {
+            this.disable();
+        }
     }
     enable() {
         this._enabled = true;
@@ -85,41 +83,48 @@ export class DhcpServer {
         while (this._enabled) {
             const req = await this.sock.receive(5000);
             if (req && req[0].data) {
+                console.log(`DHCP-SVR: received message`);
                 const request = DhcpPayload.parse(req[0].data);
+                // PLACEHOLDER
+                const ingress_ip = new Ipv4Address([192, 168, 0, 1]);
                 if (request.op == OP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE)) {
                     const message_type = request.options.get(DhcpOptions.MESSAGE_TYPE)[1][0];
                     if (message_type == DhcpMessageType.DHCPDISCOVER) {
                         setTimeout(() => {
-                            this.dhcpOffer(request);
+                            this.dhcpOffer(request, ingress_ip);
                         }, 0);
                     }
                     else if (message_type == DhcpMessageType.DHCPREQUEST) {
                         setTimeout(() => {
-                            this.dhcpAcknowledge(request);
+                            this.dhcpAcknowledge(request, ingress_ip);
                         }, 0);
                     }
                 }
             }
         }
     }
-    async dhcpOffer(request) {
+    async dhcpOffer(request, ingress_ip) {
+        const server_mac = this.lib.getMacFromIpv4(ingress_ip);
+        if (!server_mac) {
+            return;
+        }
+        const record_details = this.getRecordDetailsFromServerMac(server_mac);
+        if (!record_details) {
+            return;
+        }
+        const [server_ip, prefix, router_address] = record_details;
+        const offered_ipv4 = await this.findAvailableIpAddress(server_mac);
+        if (!offered_ipv4) {
+            return;
+        }
         const chaddr_arr = request.chaddr.slice(0, 6);
         const chaddr = new MacAddress([
             chaddr_arr[0], chaddr_arr[1], chaddr_arr[2],
             chaddr_arr[3], chaddr_arr[4], chaddr_arr[5]
         ]);
-        const ip_and_mac = this.findServerIpv4AndMac();
-        if (!ip_and_mac) {
-            return;
-        }
-        const [server_ip, server_mac] = ip_and_mac;
-        const offered_ipv4 = await this.findAvailableIpAddress(server_ip);
-        if (!offered_ipv4) {
-            return;
-        }
         // TODO: a check should be performed before including subnet mask, router in offer
         // (this also applies for the ack)
-        const offer = DhcpPayload.dhcpOffer(request.xid, chaddr, offered_ipv4, server_ip, this._prefix.mask, this._router);
+        const offer = DhcpPayload.dhcpOffer(request.xid, chaddr, offered_ipv4, server_ip, prefix.mask, router_address);
         const offer_frame = this.createFrame(offer, chaddr, server_mac, server_ip, new Ipv4Address([0, 0, 0, 0]));
         console.log(`DHCP-SVR: SENDING OFFER`);
         this.lib.sendFrame(offer_frame, server_mac);
@@ -135,42 +140,60 @@ export class DhcpServer {
             }
         }, this.OFFER_TIMEOUT);
     }
-    dhcpAcknowledge(dhcp_payload) {
+    dhcpAcknowledge(dhcp_payload, ingress_ip) {
+        const server_mac = this.lib.getMacFromIpv4(ingress_ip);
+        if (!server_mac) {
+            return;
+        }
+        const record_details = this.getRecordDetailsFromServerMac(server_mac);
+        if (!record_details) {
+            return;
+        }
+        const [server_ip, prefix, router_address] = record_details;
         const chaddr_arr = dhcp_payload.chaddr.slice(0, 6);
         const chaddr = new MacAddress([
             chaddr_arr[0], chaddr_arr[1], chaddr_arr[2],
             chaddr_arr[3], chaddr_arr[4], chaddr_arr[5]
         ]);
         const chaddr_str = chaddr.toString();
-        if (this.offers_given_mac.has(chaddr_str)) {
-            const ip_and_mac = this.findServerIpv4AndMac();
-            if (!ip_and_mac) {
-                return;
-            }
-            const [server_ip, server_mac] = ip_and_mac;
-            const offered_ipv4 = this.offers_given_mac.get(chaddr_str);
-            // send ack
-            const ack = DhcpPayload.dhcpAck(dhcp_payload.xid, this.LEASE_TIME, chaddr, offered_ipv4, server_ip, this._prefix.mask, this._router);
-            const ack_frame = this.createFrame(ack, chaddr, server_mac, server_ip, new Ipv4Address([0, 0, 0, 0]));
-            console.log(`DHCP-SVR: SENDING ACK`);
-            this.lib.sendFrame(ack_frame, server_mac);
-            this.offers_given_mac.delete(chaddr_str);
+        if (!this.offers_given_mac.has(chaddr_str)) {
+            return;
         }
+        const offered_ipv4 = this.offers_given_mac.get(chaddr_str);
+        // send ack
+        const ack = DhcpPayload.dhcpAck(dhcp_payload.xid, this.LEASE_TIME, chaddr, offered_ipv4, server_ip, prefix.mask, router_address);
+        const ack_frame = this.createFrame(ack, chaddr, server_mac, server_ip, new Ipv4Address([0, 0, 0, 0]));
+        console.log(`DHCP-SVR: SENDING ACK`);
+        this.lib.sendFrame(ack_frame, server_mac);
+        this.offers_given_mac.delete(chaddr_str);
     }
-    findServerIpv4AndMac() {
-        const server_ip = this.lib.getIpv4Addresses().find((pair) => pair[0].and(pair[1]).compare(this._network) == 0);
-        if (!server_ip || !server_ip[0]) {
+    /**
+     * Gives information regarding the DHCP record associated with an interface. Returns undefined if no record exists.
+     * @param server_mac MAC address of the serving interface
+     * @returns If the record exists, [server_ip, pool_prefix, router_address] are returned as a tuple. Otherwise, undefined.
+     */
+    getRecordDetailsFromServerMac(server_mac) {
+        const ip_info = this.lib.getIpInfoFromMac(server_mac);
+        if (!ip_info || !ip_info[0] || !ip_info[1]) {
             return undefined;
         }
-        const server_mac = this.lib.getMacFromIpv4(server_ip[0]);
-        if (!server_mac) {
+        const network_address = ip_info[0].and(ip_info[1]);
+        const network_address_str = network_address.toString();
+        if (!this._records.has(network_address_str)) {
             return undefined;
         }
-        return [server_ip[0], server_mac];
+        const [prefix, router_address] = this._records.get(network_address_str);
+        return [ip_info[0], prefix, router_address];
     }
-    async findAvailableIpAddress(server_ip) {
-        let try_ip = this._network.inc();
-        for (; try_ip.compare(this._network.broadcastAddress(this._prefix)) != 0; try_ip = try_ip.inc()) {
+    async findAvailableIpAddress(server_mac) {
+        const record_details = this.getRecordDetailsFromServerMac(server_mac);
+        if (!record_details) {
+            return undefined;
+        }
+        const [server_ip, prefix, router_address] = record_details;
+        const network_address = server_ip.and(prefix);
+        let try_ip = network_address.inc();
+        for (; try_ip.compare(network_address.broadcastAddress(prefix)) != 0; try_ip = try_ip.inc()) {
             if (this.offers_given_ipv4.has(try_ip)) {
                 continue;
             }

@@ -55,6 +55,11 @@ export class Device {
         }
         else {
             return undefined;
+        } }, (mac_address) => { const l3_inf = this.getL3InfFromMac(mac_address); if (l3_inf) {
+            return [l3_inf.ipv4, l3_inf.ipv4_prefix];
+        }
+        else {
+            return undefined;
         } }, (packet) => { this.tryEncapsulateAndSend(packet); }, (frame, egress_mac) => {
             if (RECORDING_ON) {
                 const timestamp = performance.now();
@@ -62,6 +67,8 @@ export class Device {
             }
             setTimeout(() => this.getInfFromMac(egress_mac)?.send(frame), 10);
         }, (socket) => { this._sockets.addIcmpSocket(socket); }, (socket) => { this._sockets.deleteIcmpSocket(socket); }, (socket) => { this._sockets.addUdpSocket(socket); }, (socket) => { this._sockets.deleteUdpSocket(socket); });
+        // TODO: make the DHCP client an abstract property of Device so that functions can be implemented independently
+        // and default_gateway could then be returned to PCs
         this._dhcp_client = new DhcpClient(this._lib, (inf_mac, ipv4_address, prefix) => {
             const inf = this.getL3InfFromMac(inf_mac);
             if (inf) {
@@ -599,6 +606,18 @@ export class Device {
         }
         return undefined;
     }
+    get dhcp_records() {
+        return this._dhcp_server.records;
+    }
+    addDhcpRecord(pool_network_address, pool_prefix, router_address) {
+        this._dhcp_server.addRecord(pool_network_address, pool_prefix, router_address);
+    }
+    deleteDhcpRecord(pool_network_address) {
+        this._dhcp_server.delRecord(pool_network_address);
+    }
+    hasDhcpServer() {
+        return this._dhcp_server ? true : false;
+    }
     toggleDhcpClient(mac) {
         if (!this._l3infs.some((x) => x.mac.compare(mac) == 0)) {
             return false;
@@ -618,10 +637,11 @@ export class Device {
 }
 Device.DeviceList = new IdentifiedList();
 export class Libraries {
-    constructor(getIpv4Addresses, getMacAddresses, getMacFromIpv4, sendPacket, sendFrame, bindICMP, closeICMP, bindUDP, closeUDP) {
+    constructor(getIpv4Addresses, getMacAddresses, getMacFromIpv4, getIpInfoFromMac, sendPacket, sendFrame, bindICMP, closeICMP, bindUDP, closeUDP) {
         this.getIpv4Addresses = getIpv4Addresses;
         this.getMacAddresses = getMacAddresses;
         this.getMacFromIpv4 = getMacFromIpv4;
+        this.getIpInfoFromMac = getIpInfoFromMac;
         this.sendPacket = sendPacket;
         this.sendFrame = sendFrame;
         this.bindICMP = bindICMP;
@@ -655,6 +675,7 @@ export class PersonalComputer extends Device {
     constructor() {
         super(DeviceType.PC);
         this._loopback = VirtualL3Interface.newLoopback(this._network_controller);
+        this._dhcp_server = undefined;
         this._allow_forwarding = false;
         this._l3infs.push(new L3Interface(this._network_controller, 0));
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
@@ -668,7 +689,6 @@ export class PersonalComputer extends Device {
     }
     set ipv4_prefix(ipv4_prefix) {
         this._l3infs[0].ipv4_prefix.value = ipv4_prefix;
-        // console.log(`${this._interfaces[0].ipv4_prefix} - ${this._inf.ipv4_mask}`);
     }
     get inf() {
         return this._l3infs[0];
@@ -678,6 +698,7 @@ export class Switch extends Device {
     constructor(num_inf) {
         super(DeviceType.SWITCH);
         this._loopback = undefined;
+        this._dhcp_server = undefined;
         for (let i = 0; i < num_inf; i++) {
             this._l2infs.push(new L2Interface(this._network_controller, i));
         }
@@ -688,15 +709,13 @@ export class Router extends Device {
     constructor(num_inf) {
         super(DeviceType.ROUTER);
         this._loopback = VirtualL3Interface.newLoopback(this._network_controller);
+        this._dhcp_server = new DhcpServer(this._lib);
         for (let i = 0; i < num_inf; i++) {
             this._l3infs.push(new L3Interface(this._network_controller, i));
         }
         InfMatrix.link(...this._l3infs.map((x) => x.mac));
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
-        this._dhcp_server = new DhcpServer(this._lib);
-        // TODO: allow users to toggle DHCP Server on/off
-        this._dhcp_server.enable();
     }
 }
 //# sourceMappingURL=device.js.map

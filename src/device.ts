@@ -38,6 +38,9 @@ export abstract class Device implements IdentifiedItem {
     protected readonly _dhcp_client: DhcpClient;
     private static DeviceList = new IdentifiedList<Device>();
 
+    // servers
+    protected abstract _dhcp_server: DhcpServer;
+
     public constructor(device_type: DeviceType) {
         this.device_type = device_type;
         let assigned = false;
@@ -53,7 +56,8 @@ export abstract class Device implements IdentifiedItem {
         this._lib = new Libraries(
             () => this._l3infs.map((inf) => [inf.ipv4,inf.ipv4_prefix]),
             () => [...this._l2infs, ...this._l3infs].map((inf) => inf.mac),
-            (ipv4_address: Ipv4Address) => { const inf = this.getInfFromIpv4(ipv4_address); if (inf) { return inf.mac } else { return undefined; } },
+            (ipv4_address: Ipv4Address) => { const inf = this.getInfFromIpv4(ipv4_address); if (inf) { return inf.mac; } else { return undefined; } },
+            (mac_address: MacAddress) => { const l3_inf = this.getL3InfFromMac(mac_address); if (l3_inf) { return [l3_inf.ipv4, l3_inf.ipv4_prefix] } else { return undefined; } },
             (packet: Ipv4Packet) => { this.tryEncapsulateAndSend(packet); },
             (frame: Frame, egress_mac: MacAddress) => {
                 if (RECORDING_ON) {
@@ -68,6 +72,8 @@ export abstract class Device implements IdentifiedItem {
             (socket: Socket<UdpDatagram>) => { this._sockets.deleteUdpSocket(socket); },
         );
 
+        // TODO: make the DHCP client an abstract property of Device so that functions can be implemented independently
+        // and default_gateway could then be returned to PCs
         this._dhcp_client = new DhcpClient(
             this._lib,
             (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => {
@@ -685,6 +691,22 @@ export abstract class Device implements IdentifiedItem {
         return undefined;
     }
 
+    public get dhcp_records(): [Readonly<Ipv4Address>, Readonly<Ipv4Prefix>, Readonly<Ipv4Address>][] {
+        return this._dhcp_server.records;
+    }
+
+    public addDhcpRecord(pool_network_address: Ipv4Address, pool_prefix: Ipv4Prefix, router_address: Ipv4Address) {
+        this._dhcp_server.addRecord(pool_network_address, pool_prefix, router_address);
+    }
+
+    public deleteDhcpRecord(pool_network_address: Ipv4Address) {
+        this._dhcp_server.delRecord(pool_network_address);
+    }
+
+    public hasDhcpServer(): boolean {
+        return this._dhcp_server ? true : false;
+    }
+
     public toggleDhcpClient(mac: MacAddress): boolean {
         if (!this._l3infs.some((x) => x.mac.compare(mac) == 0)) {
             return false;
@@ -708,6 +730,7 @@ export class Libraries {
     public getIpv4Addresses: () => [Ipv4Address, Ipv4Prefix][];
     public getMacAddresses: () => MacAddress[];
     public getMacFromIpv4: (ipv4_address: Ipv4Address) => MacAddress;
+    public getIpInfoFromMac: (mac_address: MacAddress) => [Ipv4Address, Ipv4Prefix];
     public sendPacket: (packet: Ipv4Packet) => void;
     public sendFrame: (frame: Frame, egress_mac: MacAddress) => void;
     public bindICMP: (socket: Socket<IcmpDatagram>) => void;
@@ -719,6 +742,7 @@ export class Libraries {
         getIpv4Addresses: () => [Ipv4Address, Ipv4Prefix][],
         getMacAddresses: () => MacAddress[],
         getMacFromIpv4: (ipv4_address: Ipv4Address) => MacAddress,
+        getIpInfoFromMac: (mac_address: MacAddress) => [Ipv4Address, Ipv4Prefix],
         sendPacket: (packet: Ipv4Packet) => void,
         sendFrame: (frame: Frame, egress_mac: MacAddress) => void,
         bindICMP: (socket: Socket<IcmpDatagram>) => void,
@@ -729,6 +753,7 @@ export class Libraries {
         this.getIpv4Addresses = getIpv4Addresses;
         this.getMacAddresses = getMacAddresses;
         this.getMacFromIpv4 = getMacFromIpv4;
+        this.getIpInfoFromMac = getIpInfoFromMac;
         this.sendPacket = sendPacket;
         this.sendFrame = sendFrame;
         this.bindICMP = bindICMP;
@@ -767,6 +792,7 @@ export class NetworkController {
 
 export class PersonalComputer extends Device {
     protected readonly _loopback: VirtualL3Interface = VirtualL3Interface.newLoopback(this._network_controller);
+    protected readonly _dhcp_server: DhcpServer = undefined;
 
     public constructor() {
         super(DeviceType.PC);
@@ -775,7 +801,6 @@ export class PersonalComputer extends Device {
 
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
-
     }
 
     public set ipv4(ipv4: [number, number, number, number]) {
@@ -788,7 +813,6 @@ export class PersonalComputer extends Device {
 
     public set ipv4_prefix(ipv4_prefix: number) {
         this._l3infs[0].ipv4_prefix.value = ipv4_prefix;
-        // console.log(`${this._interfaces[0].ipv4_prefix} - ${this._inf.ipv4_mask}`);
     }
 
     public get inf(): L3Interface {
@@ -798,6 +822,7 @@ export class PersonalComputer extends Device {
 
 export class Switch extends Device {
     protected readonly _loopback: VirtualL3Interface = undefined;
+    protected readonly _dhcp_server: DhcpServer = undefined;
 
     public constructor(num_inf: number) {
         super(DeviceType.SWITCH);
@@ -810,7 +835,7 @@ export class Switch extends Device {
 
 export class Router extends Device {
     protected readonly _loopback: VirtualL3Interface = VirtualL3Interface.newLoopback(this._network_controller);
-    public readonly _dhcp_server: DhcpServer; // TODO: make private
+    protected readonly _dhcp_server: DhcpServer = new DhcpServer(this._lib);
 
     public constructor(num_inf: number) {
         super(DeviceType.ROUTER);
@@ -821,10 +846,5 @@ export class Router extends Device {
 
         this._arp_table.setLocalInfs(this._loopback, ...this._l3infs);
         this._routing_table.setLocalInfs(this._loopback.ipv4, ...this._l3infs);
-
-        this._dhcp_server = new DhcpServer(this._lib);
-
-        // TODO: allow users to toggle DHCP Server on/off
-        this._dhcp_server.enable();
     }
 }

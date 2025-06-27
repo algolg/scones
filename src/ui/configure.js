@@ -115,19 +115,44 @@ const pingTool = (device) => {
     </div>
     `;
 };
-const dhcpServerTool = (network_address, prefix, router) => {
+const dhcpServerTool = (records) => {
+    let table_rows = "";
+    records.forEach((record) => {
+        table_rows += `
+        <tr>
+            <td>${record[0]}/${record[1]}</td>
+            <td>${record[2]}</td>
+            <td>
+                <button onclick="deleteDhcpRecord(this)" netadd="${record[0]}">
+                    <img src="assets/icons/delete.svg"/>
+                </button>
+            </td>
+        </tr>`;
+    });
     return `
+    <h3>DHCP Server</h3>
     <div class="config-option">
-        <input id="dhcp-server-dropdown" class="option-dropdown" type="checkbox">
-        <label for="dhcp-server-dropdown" class="option-dropdown-label">DHCP Server</label>
-    <div class="option-dropdown-contents">
-            <form class="option-form dhcp-server-change">
-                <label for="dhcp-network">DHCP Network Address</label>
-                <input name="dhcp-network" onchange="dhcpServerUpdateNetwork(this)" class="mono" type="text" placeholder="A.B.C.D" value="${network_address ?? ''}" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
-                <label for="dhcp-prefix">DHCP Network Prefix</label>
-                <input name="dhcp-prefix" onchange="dhcpServerUpdatePrefix(this)" class="mono" type="number" min="0" max="30" value="${prefix?.value ?? undefined}"/>
-                <label for="dhcp-router">DHCP Router</label>
-                <input name="dhcp-network" onchange="dhcpServerUpdateRouter(this)" class="mono" type="text" placeholder="A.B.C.D" value="${router ?? ''}" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
+        <table class="config-table">
+            <tr>
+                <th>Pool Network</th>
+                <th>Router Address</th>
+                <th style="width:8%"></th>
+            </tr>
+            ${table_rows}
+        </table>
+    </div>
+    <div class="config-option">
+        <input id="add-dhcp-record-dropdown" class="option-dropdown" type="checkbox">
+        <label for="add-dhcp-record-dropdown" class="option-dropdown-label">Add a DHCP Record</label>
+        <div class="option-dropdown-contents">
+            <form id="add-dhcp-record-form" class="option-form" onsubmit="addDhcpRecord()">
+                <label for="dhcp-pool-network">DHCP Pool Network Address</label>
+                <input name="dhcp-pool-network" class="mono" type="text" placeholder="A.B.C.D" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
+                <label for="dhcp-pool-prefix">DHCP Pool Prefix</label>
+                <input name="dhcp-pool-prefix" class="mono" type="number" min="0" max="30" required/>
+                <label for="dhcp-router-ipv4-address">Router IPv4 Address</label>
+                <input name="dhcp-router-ipv4-address" class="mono" type="text" placeholder="A.B.C.D" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
+                <button type="submit">Add</button>
             </form>
         </div>
     </div>
@@ -168,15 +193,19 @@ export function displayInfo(device) {
         configurePanel.innerHTML += interfaceConfig(idx, l3inf.mac, InfLayer.L3, l3inf.isActive(), l3inf.ipv4, l3inf.ipv4_prefix, device.dhcpEnabled(l3inf.mac));
     }
     if (device.l3infs.length > 0) {
-        // add routing section and ping section
+        // add routing section
         configurePanel.innerHTML += routeConfig(device.getAllRoutes());
         prevent_default_form_ids.push('add-route-form');
+        // add server section
+        if (device.hasDhcpServer()) {
+            configurePanel.innerHTML += `<h2>Servers</h2>`;
+            configurePanel.innerHTML += dhcpServerTool(device.dhcp_records);
+            prevent_default_form_ids.push('add-dhcp-record-form');
+        }
+        // add ping section
         configurePanel.innerHTML += `<h2>Tools</h2>`;
         configurePanel.innerHTML += pingTool(device);
         prevent_default_form_ids.push('execute-ping-form');
-        if (isRouter(device)) {
-            configurePanel.innerHTML += dhcpServerTool(device._dhcp_server.network, device._dhcp_server.prefix, device._dhcp_server.router);
-        }
     }
     for (const form_id of prevent_default_form_ids) {
         document.getElementById(form_id).addEventListener("submit", x => x.preventDefault());
@@ -288,6 +317,33 @@ function updateIpv4Prefix(ele) {
     refreshL3InfLabels();
 }
 window.updateIpv4Prefix = updateIpv4Prefix;
+function parseIpv4Address(ipv4_string) {
+    const ipv4_address = Ipv4Address.parseString(ipv4_string);
+    if (!ipv4_address) {
+        throw new Error(`Invalid Form Input: ${ipv4_string}`);
+    }
+    return ipv4_address;
+}
+function parseFormIpv4Address(form_ele, field_name) {
+    const form = new FormData(form_ele);
+    const form_ipv4_address = form.get(field_name);
+    return parseIpv4Address(form_ipv4_address);
+}
+function parseNumber(num_str, min = Number.MIN_VALUE, max = Number.MAX_VALUE) {
+    const num = parseInt(num_str);
+    if (isNaN(num)) {
+        throw new Error(`Invalid Form Input: ${num_str}`);
+    }
+    if (num < min || num > max) {
+        throw new Error(`Invalid Form Input: ${num_str} is out of range`);
+    }
+    return num;
+}
+function parseFormNumber(form_ele, field_name, min = Number.MIN_VALUE, max = Number.MAX_VALUE) {
+    const form = new FormData(form_ele);
+    const form_number = form.get(field_name);
+    return parseNumber(form_number);
+}
 function addRoute() {
     const form_ele = document.getElementById('add-route-form');
     if (form_ele === undefined) {
@@ -427,39 +483,6 @@ function refreshPingTerminal(device) {
         ping_terminal.innerHTML = '<div>' + device.ping_terminal_lines.join('</div><div>') + '</div>';
     }
 }
-function ipv4AddressFromInputEle(ele) {
-    const num_str = ele.getAttribute('num');
-    if (num_str === undefined) {
-        return undefined;
-    }
-    const num = parseInt(num_str);
-    if (num < 0 || num >= focusedDevice.l3infs.length) {
-        return undefined;
-    }
-    const ipv4 = Ipv4Address.parseString(ele.value);
-    if (ipv4 === undefined) {
-        return undefined;
-    }
-    return ipv4;
-}
-function ipv4PrefixFromInputEle(ele) {
-    const num_str = ele.getAttribute('num');
-    if (num_str === undefined) {
-        return undefined;
-    }
-    const num = parseInt(num_str);
-    if (num < 0 || num >= focusedDevice.l3infs.length) {
-        return undefined;
-    }
-    const prefix = ele.valueAsNumber;
-    if (prefix === undefined || prefix < 0 || prefix > 32) {
-        return undefined;
-    }
-    return new Ipv4Prefix(prefix);
-}
-function isRouter(dev) {
-    return dev._dhcp_server !== undefined;
-}
 function toggleDhcpClient(ele, mac_string) {
     const mac = MacAddress.parseString(mac_string);
     const device = focusedDevice;
@@ -468,37 +491,23 @@ function toggleDhcpClient(ele, mac_string) {
     ele.checked !== result;
 }
 window.toggleDhcpClient = toggleDhcpClient;
-function dhcpServerUpdateNetwork(ele) {
-    const network = ipv4AddressFromInputEle(ele);
-    if (!network) {
-        return;
-    }
-    const device = focusedDevice;
-    if (isRouter(device)) {
-        device._dhcp_server.network = network;
-    }
+function addDhcpRecord() {
+    const form_ele = document.getElementById('add-dhcp-record-form');
+    const pool_network_address = parseFormIpv4Address(form_ele, 'dhcp-pool-network');
+    const pool_prefix = parseFormNumber(form_ele, 'dhcp-pool-prefix', 0, 30);
+    const router_address = parseFormIpv4Address(form_ele, 'dhcp-router-ipv4-address');
+    focusedDevice.addDhcpRecord(pool_network_address, new Ipv4Prefix(pool_prefix), router_address);
+    displayInfo(focusedDevice);
 }
-window.dhcpServerUpdateNetwork = dhcpServerUpdateNetwork;
-function dhcpServerUpdatePrefix(ele) {
-    const prefix = ipv4PrefixFromInputEle(ele);
-    if (!prefix) {
-        return;
+window.addDhcpRecord = addDhcpRecord;
+function deleteDhcpRecord(ele) {
+    if (!ele.hasAttribute('netadd')) {
+        throw new Error("Cannot delete DHCP record");
     }
-    const device = focusedDevice;
-    if (isRouter(device)) {
-        device._dhcp_server.prefix = prefix;
-    }
+    const netadd = ele.getAttribute('netadd');
+    const pool_network_address = parseIpv4Address(netadd);
+    focusedDevice.deleteDhcpRecord(pool_network_address);
+    displayInfo(focusedDevice);
 }
-window.dhcpServerUpdatePrefix = dhcpServerUpdatePrefix;
-function dhcpServerUpdateRouter(ele) {
-    const router = ipv4AddressFromInputEle(ele);
-    if (!router) {
-        return;
-    }
-    const device = focusedDevice;
-    if (isRouter(device)) {
-        device._dhcp_server.router = router;
-    }
-}
-window.dhcpServerUpdateRouter = dhcpServerUpdateRouter;
+window.deleteDhcpRecord = deleteDhcpRecord;
 //# sourceMappingURL=configure.js.map

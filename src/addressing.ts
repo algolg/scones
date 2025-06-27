@@ -421,7 +421,9 @@ export class Ipv4Prefix {
         return new Ipv4Address([255-arr[0], 255-arr[1], 255-arr[2], 255-arr[3]]);
     }
 
-    public 
+    toString(): string {
+        return this._ipv4_prefix.toString();
+    }
 }
 
 function main() {
