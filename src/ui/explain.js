@@ -2,7 +2,7 @@ import { ArpPacket, OP } from "../protocols/arp.js";
 import { EtherType } from "../frame.js";
 import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "../protocols/ip.js";
-import { Protocol } from "../socket.js";
+import { Protocol } from "./variables.js";
 export function getExplanation(frame) {
     const ethertype = frame.ethertype;
     let type = "";

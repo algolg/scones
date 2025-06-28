@@ -30,6 +30,9 @@ export class Cable {
                 Math.abs(x - (this.start_x + this.end_x) / 2) <= 2));
     }
     drawLabels() {
+        if (!ctx) {
+            return;
+        }
         const angle = Math.atan2(this.end_y - this.start_y, this.end_x - this.start_x);
         const length = Math.sqrt(Math.pow(this.end_y - this.start_y, 2) + Math.pow(this.end_x - this.start_x, 2));
         const mult = Math.min(1.2, length / (ICON_RADIUS() * 2.4));

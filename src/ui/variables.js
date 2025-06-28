@@ -1,3 +1,12 @@
+export var Protocol;
+(function (Protocol) {
+    Protocol[Protocol["IPv4"] = 0] = "IPv4";
+    Protocol[Protocol["ICMP"] = 1] = "ICMP";
+    Protocol[Protocol["ARP"] = 2] = "ARP";
+    Protocol[Protocol["TCP"] = 3] = "TCP";
+    Protocol[Protocol["UDP"] = 4] = "UDP";
+})(Protocol || (Protocol = {}));
+;
 const canvas = document.getElementById('canvas');
 export let RECORDING_ON = false;
 export let RECORDED_FRAMES = [];

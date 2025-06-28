@@ -2,6 +2,7 @@ import { Ipv4Address, Ipv4Prefix, MacAddress } from "../addressing.js";
 import { Device, DeviceType, PersonalComputer, Router, Switch } from "../device.js";
 import { InfMatrix } from "../interface.js";
 import { redrawCanvas } from "./canvas-init.js";
+import { parseIpv4Address, parseNumber } from "./configure.js";
 import { clearFocus } from "./topology.js";
 import { ROUTER_INF_NUM, SWITCH_INF_NUM } from "./variables.js";
 const fileUpload = document.getElementById('environment-file-upload');
@@ -12,7 +13,7 @@ function exportEnvironment(anchor) {
             "coords": device.coords,
             "l3infs": device.l3infs.map((inf) => [inf.mac.toString(), inf.ipv4.toString(), inf.ipv4_prefix.value]),
             "l2infs": device.l2infs.map((inf) => inf.mac.toString()),
-            "routes": device.getAllRoutes().map((route) => [route[0], route[1].toString(), route[2].toString(), route[3]])
+            "routes": device.getAllRoutes()?.map((route) => [route[0], route[1].toString(), route[2].toString(), route[3]]) ?? []
         }))),
         "interfaces": (InfMatrix.adjacency_list.map((infs) => [infs[0].mac.toString(), infs[1].mac.toString()]))
     });
@@ -22,10 +23,13 @@ function exportEnvironment(anchor) {
 }
 window.exportEnvironment = exportEnvironment;
 function loadEnvironment() {
-    fileUpload.click();
+    fileUpload?.click();
 }
 window.loadEnvironment = loadEnvironment;
 async function loadJSON(input) {
+    if (!input.files) {
+        return;
+    }
     const json_str = await input.files[0].text();
     try {
         let object = JSON.parse(json_str);
@@ -56,7 +60,7 @@ async function loadJSON(input) {
             }
             for (let i = 0; i < l3infs.length; i++) {
                 mac_map.set(l3infs[i][0], new_device.l3infs[i].mac.toString());
-                new_device.l3infs[i].ipv4 = Ipv4Address.parseString(l3infs[i][1]).toTuple();
+                new_device.l3infs[i].ipv4 = Ipv4Address.parseString(l3infs[i][1])?.toTuple() ?? [0, 0, 0, 0];
                 new_device.l3infs[i].ipv4_prefix = l3infs[i][2];
             }
             for (let i = 0; i < l2infs.length; i++) {
@@ -67,7 +71,7 @@ async function loadJSON(input) {
             }
             for (let route of routes) {
                 const split_dest = route[0].split('/');
-                new_device.setRoute(Ipv4Address.parseString(split_dest[0]), new Ipv4Prefix(parseInt(split_dest[1])), Ipv4Address.parseString(route[1]), Ipv4Address.parseString(route[2]), route[3]);
+                new_device.setRoute(parseIpv4Address(split_dest[0]), new Ipv4Prefix(parseNumber(split_dest[1], 0, 32)), parseIpv4Address(route[1]), parseIpv4Address(route[2]), route[3]);
             }
             new_device.coords = [coords[0], coords[1]];
         }
@@ -77,7 +81,7 @@ async function loadJSON(input) {
             }
             const firstMac = MacAddress.parseString(mac_map.get(pair[0]));
             const secondMac = MacAddress.parseString(mac_map.get(pair[1]));
-            if (firstMac === undefined || secondMac === undefined) {
+            if (!firstMac || !secondMac) {
                 throw "invalid format";
             }
             InfMatrix.connect(firstMac, secondMac);

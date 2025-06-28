@@ -92,13 +92,13 @@ export class ArpTable {
     /**
      * Returns an ARP table entry for a given IP address
      * @param ip the IP address to get the ARP entry of
-     * @returns (remote MAC, local MAC) pair, if one exists. undefined otherwise
+     * @returns (remote MAC, local MAC) pair, if one exists. null otherwise
      */
     get(ip) {
         if (this._local_infs.some((inf) => inf !== undefined && inf.compare(ip) == 0)) {
             return [MacAddress.loopback, MacAddress.loopback];
         }
-        return this._table.get(this.keyToString(ip.ethertype, ip));
+        return this._table.get(this.keyToString(ip.ethertype, ip)) ?? null;
     }
     has(ip) {
         return this._table.has(this.keyToString(ip.ethertype, ip));

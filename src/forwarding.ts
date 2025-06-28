@@ -11,8 +11,8 @@ export class ForwardingInformationBase {
     public delete(destination: MacAddress): boolean {
         return this._table.delete(destination.toString());
     }
-    public get(destination: MacAddress): MacAddress {
-        return this._table.get(destination.toString());
+    public get(destination: MacAddress): MacAddress | null {
+        return this._table.get(destination.toString()) ?? null;
     }
     public has(destination: MacAddress): boolean {
         console.log(`** ${destination} is in my forwarding table`)

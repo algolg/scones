@@ -122,14 +122,14 @@ export class IdentifiedList<T extends IdentifiedItem> extends Array<T> {
     /**
      * Returns the item that has a given ID
      * @param id The ID of the item to look for
-     * @returns The item, if it exists. undefined otherwise.
+     * @returns The item, if it exists. null otherwise.
      */
-    public itemFromId(id: Identifier): T {
+    public itemFromId(id: Identifier): T | null {
         const idx = this.indexOfId(id)
         if (idx != -1) {
             return this[idx];
         }
-        return undefined;
+        return null;
     }
 }
 
@@ -183,15 +183,15 @@ class InterfaceMatrix {
         return this._list.existsId(mac);
     }
 
-    public getCoords(mac: MacAddress): [number, number] {
+    public getCoords(mac: MacAddress): [number, number] | null {
         const idx = this._list.indexOfId(mac)
-        if (idx !== undefined) {
-            return this._list[idx].coords;
+        if (idx == -1) {
+            return null;
         }
-        return undefined;
+        return this._list[idx].coords;
     }
 
-    private getRow(mac: MacAddress): number[] {
+    private getRow(mac: MacAddress): number[] | null {
         return this._matrix[this._list.indexOfId(mac)]
     }
 
@@ -199,10 +199,10 @@ class InterfaceMatrix {
      * @param mac MAC address of the interface to find the neighbor of
      * @returns If the interface has a neighbor, the neighbor interface. Else, undefined.
      */
-    public getNeighborInf(mac: MacAddress): Interface {
-        const try_neighbor_idx = this.getRow(mac).indexOf(1);
-        if (try_neighbor_idx == -1) {
-            return undefined;
+    public getNeighborInf(mac: MacAddress): Interface | null {
+        const try_neighbor_idx = this.getRow(mac)?.indexOf(1);
+        if (try_neighbor_idx === undefined || try_neighbor_idx == -1) {
+            return null;
         }
         return this._list[try_neighbor_idx];
     }
@@ -213,7 +213,7 @@ class InterfaceMatrix {
      */
     public getLinkedInfs(mac: MacAddress): Interface[] {
         const row = this.getRow(mac);
-        if (row !== undefined) {
+        if (row !== null) {
             return row.filter((x) => x == 2).map((x) => this._list[x]);
         }
         return [];
@@ -221,7 +221,7 @@ class InterfaceMatrix {
 
     private numLinks(mac: MacAddress): number {
         const row = this.getRow(mac);
-        if (row !== undefined) {
+        if (row !== null) {
             return row.reduce((accumulator, currentValue) => (currentValue == 2 ? accumulator + 1 : accumulator), 0);
         }
         return -1;
@@ -234,7 +234,7 @@ class InterfaceMatrix {
      */
     public isConnected(mac: MacAddress): boolean {
         const row = this.getRow(mac);
-        if (row !== undefined) {
+        if (row !== null) {
             return row.some((x) => x == 1);
         }
         return false;
@@ -286,8 +286,13 @@ class InterfaceMatrix {
             this._matrix[secondMac_idx][firstMac_idx] = 0;
             const firstInf = this._list.itemFromId(firstMac);
             const secondInf = this._list.itemFromId(secondMac);
-            firstInf.clearFib();
-            secondInf.clearFib();
+            if (firstInf && secondInf) {
+                firstInf.clearFib();
+                secondInf.clearFib();
+            }
+            else {
+                throw `Invalid MAC Addresses`;
+            }
         }
         else {
             throw `Invalid MAC Addresses`;
@@ -309,7 +314,7 @@ class InterfaceMatrix {
 
     public async send(frame: Frame, egress_mac: MacAddress): Promise<void> {
         const sender_inf = this._list.itemFromId(egress_mac);
-        if (sender_inf === undefined) {
+        if (!sender_inf) {
             throw Error(`sender MAC ${frame.src_mac} does not belong to an interface`)
         }
 
@@ -319,7 +324,7 @@ class InterfaceMatrix {
         }
 
         const recipient_inf = this.getNeighborInf(egress_mac);
-        await recipient_inf.receive(frame, recipient_inf.mac);
+        await recipient_inf?.receive(frame, recipient_inf.mac);
     }
 
     public get adjacency_list(): [Interface, Interface][] {
@@ -354,7 +359,7 @@ abstract class Interface implements IdentifiedItem {
     protected readonly _mac: MacAddress;
     readonly num: number;
     protected _status: InfStatus = InfStatus.UP;
-    protected _vlan: number = null;
+    protected _vlan: number = 1;
     protected _mtu: number = 1500; // TODO: implement MTU
     protected readonly _layer: InfLayer;
     protected readonly _network_controller: NetworkController;
@@ -363,8 +368,9 @@ abstract class Interface implements IdentifiedItem {
         this._network_controller = network_controller;
         this._layer = layer;
         this.num = num;
-        if (tracked) {
+        if (tracked || !mac) {
             let assigned = false;
+            this._mac = MacAddress.loopback;
             while (!assigned) {
                 const mac = MacAddress.rand();
                 if (!InfMatrix.existsMac(mac)) {

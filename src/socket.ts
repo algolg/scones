@@ -12,7 +12,7 @@ const POLLING_INTERVAL = 100;
 export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the others */> {
     readonly protocol: Protocol;
     private readonly _check: (protocol_data: T, packet: Ipv4Packet) => boolean;
-    private readonly _createResponse: (packet: Ipv4Packet) => Ipv4Packet = (packet) => undefined;
+    private readonly _createResponse: (packet: Ipv4Packet) => Ipv4Packet | null = (packet) => null;
         /**
          * This member is based on the idea that the socket (or the application that creates the
          * socket) is the one that generates a response packet. If I change my mind, then remove
@@ -56,7 +56,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
         });
     }
 
-    public async receive(timeout_ms?: number): Promise<[T, Ipv4Packet]> {
+    public async receive(timeout_ms?: number): Promise<[T, Ipv4Packet] | null> {
         return new Promise((resolve) => {
             const start = performance.now();
 
@@ -68,11 +68,11 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
                     clearInterval(interval);
                 }
                 if (data_received) {
-                    const match = this._matched.shift();
+                    const match = this._matched.shift()!;
                     resolve(match);
                 }
                 else if (timed_out || this._killed) {
-                    resolve(undefined);
+                    resolve(null);
                 }
 
             }, POLLING_INTERVAL);
@@ -88,12 +88,12 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
         return false;
     }
 
-    public get matched_top(): [T, Ipv4Packet] {
+    public get matched_top(): [T, Ipv4Packet] | null {
         if (this._matched.length > 0) {
-            return this._matched.shift();
+            return this._matched.shift()!;
         }
         else {
-            return undefined;
+            return null;
         }
     }
 
@@ -104,7 +104,7 @@ export class Socket<T extends Ipv4Packet | IcmpDatagram | UdpDatagram /* and the
         }, POLLING_INTERVAL);
     }
 
-    public createResponse(packet: Ipv4Packet): Ipv4Packet {
+    public createResponse(packet: Ipv4Packet): Ipv4Packet | null {
         return this._createResponse(packet);
     }
 

@@ -24,7 +24,7 @@ export var Protocol;
 const POLLING_INTERVAL = 100;
 export class Socket {
     constructor(protocol, direction, check_function, action = Action.ACCEPT) {
-        this._createResponse = (packet) => undefined;
+        this._createResponse = (packet) => null;
         this._matched = [];
         this._hits = 0;
         this._killed = false;
@@ -63,7 +63,7 @@ export class Socket {
                     resolve(match);
                 }
                 else if (timed_out || this._killed) {
-                    resolve(undefined);
+                    resolve(null);
                 }
             }, POLLING_INTERVAL);
         });
@@ -81,7 +81,7 @@ export class Socket {
             return this._matched.shift();
         }
         else {
-            return undefined;
+            return null;
         }
     }
     kill() {

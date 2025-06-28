@@ -2,7 +2,7 @@ import { ArpPacket, OP } from "../protocols/arp.js";
 import { EtherType, Frame } from "../frame.js";
 import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "../protocols/ip.js";
-import { Protocol } from "../socket.js";
+import { Protocol } from "./variables.js";
 
 export function getExplanation(frame: Frame): [Protocol, string] {
     const ethertype = frame.ethertype;
@@ -76,7 +76,7 @@ export function getExplanation(frame: Frame): [Protocol, string] {
     <div class="packet-description">${description}</div>
     `;
 
-    return [protocol, explanation];
+    return [protocol!, explanation];
 }
 
 function getICMPExplanation(packet: Ipv4Packet): [string, string] {

@@ -57,11 +57,16 @@ export class Cable {
     }
 
     public drawLabels() {
+        if (!ctx) {
+            return;
+        }
+
         const angle = Math.atan2(this.end_y - this.start_y, this.end_x - this.start_x);
         const length = Math.sqrt(Math.pow(this.end_y-this.start_y, 2) + Math.pow(this.end_x-this.start_x, 2))
         const mult = Math.min(1.2, length/(ICON_RADIUS()*2.4));
         const x_adjust = Math.cos(angle) * ICON_RADIUS()*mult;
         const y_adjust = Math.sin(angle) * ICON_RADIUS()*mult;
+
         ctx.font = `${ICON_SIZE/4.8}px IBM Plex Sans`;
         ctx.textAlign = 'center';
         ctx.fillText(`eth${this.start_num}`, this.start_x + x_adjust, this.start_y + y_adjust);

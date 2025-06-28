@@ -46,7 +46,7 @@ export class DhcpServer {
         let out: [Readonly<Ipv4Address>, Readonly<Ipv4Prefix>, Readonly<Ipv4Address>][] = [];
 
         for (const [key,val] of this._records.entries()) {
-            out.push([Ipv4Address.parseString(key), val[0], val[1]]);
+            out.push([Ipv4Address.parseString(key) ?? new Ipv4Address([0,0,0,0]), val[0], val[1]]);
         }
 
         return out;
@@ -95,8 +95,9 @@ export class DhcpServer {
                 // PLACEHOLDER
                 const ingress_ip: Ipv4Address = new Ipv4Address([192,168,0,1]); 
 
-                if (request.op == OP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE)) {
-                    const message_type = request.options.get(DhcpOptions.MESSAGE_TYPE)[1][0];
+                let message_type_val: [number, Uint8Array] | undefined;
+                if (request.op == OP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE) && (message_type_val = request.options.get(DhcpOptions.MESSAGE_TYPE))) {
+                    const message_type = message_type_val[1][0];
                     if (message_type == DhcpMessageType.DHCPDISCOVER) {
                         setTimeout(() => {
                             this.dhcpOffer(request, ingress_ip);
@@ -113,7 +114,9 @@ export class DhcpServer {
     }
 
     private async dhcpOffer(request: DhcpPayload, ingress_ip: Ipv4Address) {
-        const server_mac = this.lib.getMacFromIpv4(ingress_ip);
+        const server_mac = this.lib.getL3Interfaces().find(
+            (inf) => inf.ipv4_address.compare(ingress_ip) == 0
+        )?.mac_address;
         if (!server_mac) {
             return;
         }
@@ -155,7 +158,9 @@ export class DhcpServer {
     }
 
     private dhcpAcknowledge(dhcp_payload: DhcpPayload, ingress_ip: Ipv4Address) {
-        const server_mac = this.lib.getMacFromIpv4(ingress_ip);
+        const server_mac = this.lib.getL3Interfaces().find(
+            (inf) => inf.ipv4_address.compare(ingress_ip) == 0
+        )?.mac_address;
         if (!server_mac) {
             return;
         }
@@ -177,6 +182,9 @@ export class DhcpServer {
         }
 
         const offered_ipv4 = this.offers_given_mac.get(chaddr_str);
+        if (!offered_ipv4) {
+            return;
+        }
 
         // send ack
         const ack = DhcpPayload.dhcpAck(dhcp_payload.xid, this.LEASE_TIME, chaddr, offered_ipv4, server_ip, prefix.mask, router_address);
@@ -192,27 +200,29 @@ export class DhcpServer {
      * @param server_mac MAC address of the serving interface
      * @returns If the record exists, [server_ip, pool_prefix, router_address] are returned as a tuple. Otherwise, undefined.
      */
-    private getRecordDetailsFromServerMac(server_mac: MacAddress): [Ipv4Address, Ipv4Prefix, Ipv4Address] {
-        const ip_info = this.lib.getIpInfoFromMac(server_mac);
-        if (!ip_info || !ip_info[0] || !ip_info[1]) {
-            return undefined;
+    private getRecordDetailsFromServerMac(server_mac: MacAddress): [Ipv4Address, Ipv4Prefix, Ipv4Address] | null {
+        const ip_info = this.lib.getL3Interfaces().find((inf) => inf.mac_address.compare(server_mac) == 0);
+        if (!ip_info || !ip_info.ipv4_address || !ip_info.ipv4_prefix) {
+            return null;
         }
 
-        const network_address: Ipv4Address = ip_info[0].and(ip_info[1])
+        const server_ip: Ipv4Address = ip_info.ipv4_address.and(new Ipv4Prefix(32));
+        const network_address: Ipv4Address = ip_info.ipv4_address.and(ip_info.ipv4_prefix)
         const network_address_str = network_address.toString()
-        if (!this._records.has(network_address_str)) {
-            return undefined;
+        let record: [Ipv4Prefix, Ipv4Address] | undefined;
+        if (!this._records.has(network_address_str) || !(record = this._records.get(network_address_str))) {
+            return null;
         }
-        const [prefix, router_address] = this._records.get(network_address_str);
+        const [prefix, router_address] = record;
 
-        return [ip_info[0], prefix, router_address];
+        return [server_ip, prefix, router_address];
     }
 
 
-    private async findAvailableIpAddress(server_mac: MacAddress): Promise<Ipv4Address> {
+    private async findAvailableIpAddress(server_mac: MacAddress): Promise<Ipv4Address | null> {
         const record_details = this.getRecordDetailsFromServerMac(server_mac);
         if (!record_details) {
-            return undefined;
+            return null;
         }
         const [server_ip, prefix, router_address] = record_details;
         const network_address = server_ip.and(prefix);
@@ -229,7 +239,8 @@ export class DhcpServer {
             const sock = Socket.icmpSocketFrom(ping, ping_pkt);
             this.lib.bindICMP(sock);
 
-            let resp0, resp1: [IcmpDatagram, Ipv4Packet] = undefined;
+            let resp0: [IcmpDatagram, Ipv4Packet] | null;
+            let resp1: [IcmpDatagram, Ipv4Packet] | null;
             this.lib.sendPacket(ping_pkt);
             resp0 = await sock.receive(1000);
             this.lib.sendPacket(ping_pkt);
@@ -240,7 +251,7 @@ export class DhcpServer {
                 return try_ip;
             }
         }
-        return undefined;
+        return null;
     }
 
     private createFrame(dhcp_payload: DhcpPayload, client_mac: MacAddress, server_mac: MacAddress, server_ip: Ipv4Address, client_ip: Ipv4Address): Frame {
@@ -254,7 +265,7 @@ export class DhcpClient {
     private readonly lib: Libraries;
     private _enabled: Map<string,boolean> = new Map();
     private setIpAndPrefix: (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => void;
-    private setDefaultGateway: (default_gateway: Ipv4Address) => void;
+    private setDefaultGateway: (default_gateway: Ipv4Address, mac_address: MacAddress) => void;
 
     private active_sockets = new Map<string, Socket<UdpDatagram>>();
                                 //   MAC
@@ -272,7 +283,7 @@ export class DhcpClient {
     public constructor(
         lib: Libraries,
         setIpAndPrefix: (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => void,
-        setDefaultGateway: (default_gateway: Ipv4Address) => void
+        setDefaultGateway: (default_gateway: Ipv4Address, mac_address: MacAddress) => void
     ) {
         this.lib = lib;
         this.setIpAndPrefix = setIpAndPrefix;
@@ -281,8 +292,9 @@ export class DhcpClient {
 
     public enabled(mac: MacAddress): boolean {
         const mac_str = mac.toString();
-        if (this._enabled.has(mac_str)) {
-            return this._enabled.get(mac_str);
+        let out: boolean | undefined;
+        if (out = this._enabled.get(mac_str)) {
+            return out;
         }
         return false;
     }
@@ -291,8 +303,9 @@ export class DhcpClient {
         const mac_str = egress_mac.toString();
         this._enabled.set(mac_str, false);
         this.killed.add(mac_str);
-        if (this.active_sockets.has(mac_str)) {
-            const sock = this.active_sockets.get(mac_str);
+
+        let sock: Socket<UdpDatagram> | undefined;
+        if (sock = this.active_sockets.get(mac_str)) {
             sock.kill();
             this.lib.closeUDP(sock);
         }
@@ -325,11 +338,8 @@ export class DhcpClient {
         // TODO: confirm and resolve if needed
         // all sockets for a single device are identical -->
         // this will cause issues if DHCP is enabled simultaneously on multiple interfaces
-        let sock: Socket<UdpDatagram>;
-        if (this.active_sockets.has(mac_str)) {
-            sock = this.active_sockets.get(mac_str);
-        }
-        else {
+        let sock: Socket<UdpDatagram> | undefined;
+        if (!(sock = this.active_sockets.get(mac_str))) {
             sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpClient.PORT);
             this.active_sockets.set(mac_str, sock);
         }
@@ -343,7 +353,8 @@ export class DhcpClient {
             const now = performance.now();
 
             // if there are no stored offers, then the DHCP server must be discovered
-            if (!this.active_offers.has(mac_str) || this.active_offers.get(mac_str).length == 0) {
+            let offers: [DhcpPayload, number][] | undefined = this.active_offers.get(mac_str);
+            if (!offers || this.active_offers.get(mac_str)?.length == 0) {
                 const xid = Math.trunc(Math.random() * (2**32));
                 this.xids.set(xid, [mac_str, performance.now()+this.POLL_LEN]);
 
@@ -357,7 +368,6 @@ export class DhcpClient {
                 await wait(100);
             }
             else {
-                const offers = this.active_offers.get(mac_str);
                 const offer = offers[0];
                 // if there is an unexpired offer, then send a request accordingly
                 if (offer[1] > performance.now()) {
@@ -387,7 +397,7 @@ export class DhcpClient {
             console.error(`Error: DHCP client not enabled for interface with MAC ${mac_str}`);
         }
         const sock = this.active_sockets.get(mac_str);
-        while (this._enabled.get(mac_str) && !this.killed.has(mac_str)) {
+        while (sock && this._enabled.get(mac_str) && !this.killed.has(mac_str)) {
             const resp = await sock.receive(this.POLL_LEN);
             if (resp && resp[0].data) {
                 this.processResponse(resp[0].data, egress_mac, mac_str);
@@ -398,11 +408,12 @@ export class DhcpClient {
     private processResponse(data: Uint8Array, egress_mac: MacAddress, mac_str: string) {
         const response: DhcpPayload = DhcpPayload.parse(data);
 
-        let xid_record: [string, number] = this.xids.get(response.xid);
+        let xid_record: [string, number] | undefined;
         const now = performance.now();
+        let message_type_val = response.options.get(DhcpOptions.MESSAGE_TYPE);
         if (
             response.op != OP.BOOTREPLY ||
-            !response.options.has(DhcpOptions.MESSAGE_TYPE) ||
+            !message_type_val ||
             !(xid_record = this.xids.get(response.xid)) ||
             xid_record[1] <= now ||
             xid_record[0] !== mac_str ||
@@ -411,24 +422,25 @@ export class DhcpClient {
             return;
         }
 
-        const message_type = response.options.get(DhcpOptions.MESSAGE_TYPE)[1][0];
+        const message_type = message_type_val[1][0];
         if (message_type == DhcpMessageType.DHCPOFFER) {
+            const offers: [DhcpPayload, number][] = this.active_offers.get(mac_str) ?? [];
             if (!this.active_offers.has(mac_str)) {
-                this.active_offers.set(mac_str, []);
+                this.active_offers.set(mac_str, offers);
             }
-            this.active_offers.get(mac_str).push([response, now+this.OFFER_TIMEOUT]);
+            offers.push([response, now+this.OFFER_TIMEOUT]);
         }
         else if (
             message_type == DhcpMessageType.DHCPACK &&
-            this.active_offers.has(mac_str) &&
-            this.active_offers.get(mac_str).length > 0 &&
-            response.options.has(DhcpOptions.SUBNET_MASK) &&
-            response.options.get(DhcpOptions.SUBNET_MASK)[0] == 4
+            this.active_offers.get(mac_str) &&
+            this.active_offers.get(mac_str)!.length > 0 &&
+            response.options.get(DhcpOptions.SUBNET_MASK) &&
+            response.options.get(DhcpOptions.SUBNET_MASK)![0] == 4
         ) {
-            let selected_offer: [DhcpPayload, number];
+            let selected_offer: [DhcpPayload, number] | null = null;
 
             const relevant_offers = this.active_offers.get(mac_str);
-            for (let i=0; i<relevant_offers.length; i++) {
+            for (let i=0; relevant_offers && i<relevant_offers.length; i++) {
                 if (relevant_offers[i][1] > now && relevant_offers[i][0].xid === response.xid) {
                     selected_offer = relevant_offers[i];
                     break;
@@ -447,7 +459,11 @@ export class DhcpClient {
     }
 
     private setNetworkInfo(ack_payload: DhcpPayload, egress_mac: MacAddress) {
-        const subnet_mask = ack_payload.options.get(DhcpOptions.SUBNET_MASK)[1];
+        let subnet_mask_option: [number, Uint8Array] | undefined;
+        if (!(subnet_mask_option = ack_payload.options.get(DhcpOptions.SUBNET_MASK))) {
+            return;
+        }
+        const subnet_mask = subnet_mask_option[1];
 
         let prefix_len = 0;
         for (const octet of subnet_mask) {
@@ -470,9 +486,10 @@ export class DhcpClient {
         }
         this.setIpAndPrefix(egress_mac, ack_payload.yiaddr, new Ipv4Prefix(prefix_len));
 
-        if (ack_payload.options.has(DhcpOptions.ROUTER) && ack_payload.options.get(DhcpOptions.ROUTER)[0] == 4) {
-            const router: Uint8Array = ack_payload.options.get(DhcpOptions.ROUTER)[1];
-            this.setDefaultGateway(new Ipv4Address([router[0], router[1], router[2], router[3]]));
+        const router_option = ack_payload.options.get(DhcpOptions.ROUTER);
+        if (router_option && router_option[0] == 4) {
+            const router: Uint8Array = router_option[1];
+            this.setDefaultGateway(new Ipv4Address([router[0], router[1], router[2], router[3]]), egress_mac);
         }
     }
 
@@ -541,8 +558,9 @@ class DhcpPayload {
         file.slice(0,128).forEach((i, octet) => this.file[i] = octet);
 
         let options_bytes: number[] = [];
-        if (this.options.has(DhcpOptions.MESSAGE_TYPE)) {
-            const message_type = this.options.get(DhcpOptions.MESSAGE_TYPE);
+        // may need a better way to ensure that MESSAGE_TYPE is specified
+        const message_type = this.options.get(DhcpOptions.MESSAGE_TYPE);
+        if (message_type) {
             options_bytes.push(DhcpOptions.MESSAGE_TYPE, message_type[0], message_type[1][0]);
         }
         for (const [type, option] of this.options.entries()) {
@@ -604,7 +622,7 @@ class DhcpPayload {
         )
     }
 
-    public static dhcpOffer(xid: number, client_mac: MacAddress, your_ipv4: Ipv4Address, server_ipv4: Ipv4Address, subnet_mask: Ipv4Address = null, router: Ipv4Address = null) {
+    public static dhcpOffer(xid: number, client_mac: MacAddress, your_ipv4: Ipv4Address, server_ipv4: Ipv4Address, subnet_mask: Ipv4Address | null = null, router: Ipv4Address | null = null) {
         const empty_ip = new Ipv4Address([0,0,0,0]);
 
         let options = new Map<number, [number,Uint8Array]>();
@@ -624,7 +642,7 @@ class DhcpPayload {
         )
     }
 
-    public static dhcpAck(xid: number, lease_time: number, client_mac: MacAddress, your_ipv4: Ipv4Address, server_ipv4: Ipv4Address, subnet_mask: Ipv4Address = null, router: Ipv4Address = null) {
+    public static dhcpAck(xid: number, lease_time: number, client_mac: MacAddress, your_ipv4: Ipv4Address, server_ipv4: Ipv4Address, subnet_mask: Ipv4Address | null = null, router: Ipv4Address | null = null) {
         const empty_ip = new Ipv4Address([0,0,0,0]);
 
         let options = new Map<number, [number,Uint8Array]>();

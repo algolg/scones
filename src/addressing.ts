@@ -143,7 +143,7 @@ export function padTo32BitWords(arr: number[], min_bytes: number = 0, max_bytes:
 }
 
 export interface Identifier {
-    get value();
+    get value(): any;
     compare(other: this): number;
 }
 
@@ -220,7 +220,7 @@ export class MacAddress implements Identifier {
                 valid = true;
             }
         }
-        return new MacAddress(macArr);
+        return new MacAddress(macArr!);
     }
 
     /**
@@ -228,16 +228,16 @@ export class MacAddress implements Identifier {
      * @param str the string to parse
      * @returns a MacAddress object of the string, if the string is valid, or undefined otherwise
      */
-    public static parseString(str: string): MacAddress {
+    public static parseString(str: string): MacAddress | null {
         const arr = str.split(':');
         if (arr.length != 6) {
-            return undefined;
+            return null;
         }
         let num_arr: [number, number, number, number, number, number] = [0,0,0,0,0,0];
         for (let i = 0; i < 6; i++) {
             const parsed = parseInt(arr[i], 16);
             if (isNaN(parsed) || parsed < 0 || parsed > 255) {
-                return undefined;
+                return null;
             }
             num_arr[i] = parsed;
         }
@@ -332,12 +332,12 @@ export class Ipv4Address implements GeneralIpAddress {
         return Array.from(this._value).map((x) => (x).toString()).join(".");
     }
 
-    public and(prefix: Ipv4Prefix): Ipv4Address {
+    public and(prefix: Readonly<Ipv4Prefix>): Ipv4Address {
         const anded = this._value.map((x,idx) => x & prefix.mask._value[idx]);
         return new Ipv4Address([anded[0], anded[1], anded[2], anded[3]]);
     }
 
-    public broadcastAddress(prefix: Ipv4Prefix): Ipv4Address {
+    public broadcastAddress(prefix: Readonly<Ipv4Prefix>): Ipv4Address {
         const ored = this._value.map((x,idx) => x | (0xff - prefix.mask._value[idx]));
         return new Ipv4Address([ored[0], ored[1], ored[2], ored[3]]);
     }
@@ -382,16 +382,16 @@ export class Ipv4Address implements GeneralIpAddress {
      * @param str the string to parse
      * @returns an Ipv4Address object of the string, if the string is valid, or undefined otherwise
      */
-    public static parseString(str: string): Ipv4Address {
+    public static parseString(str: string): Ipv4Address | null {
         let arr = str.split('.');
         if (arr.length != 4) {
-            return undefined;
+            return null;
         }
         let num_arr: [number, number, number, number] = [0,0,0,0];
         for (let i = 0; i < 4; i++) {
             const parsed = parseInt(arr[i]);
             if (isNaN(parsed) || parsed < 0 || parsed > 255) {
-                return undefined;
+                return null;
             }
             num_arr[i] = parsed;
         }
@@ -435,10 +435,10 @@ function main() {
     console.log(`${test}\t${test.toBinary()}`)
 
     let testmac = new MacAddress([0x9c, 0x00, 0xcd, 0x61, 0x39, 0x48])
-    console.log(`${testmac}\t${testmac.toBinary().match(/.{1,4}/g).join(' ')}`);
+    console.log(`${testmac}\t${testmac.toBinary().match(/.{1,4}/g)?.join(' ')}`);
 
     let testipv4 = new Ipv4Address([192, 168, 0, 10])
-    console.log(`${testipv4}\t\t${testipv4.toBinary().match(/.{1,4}/g).join(' ')}`);
+    console.log(`${testipv4}\t\t${testipv4.toBinary().match(/.{1,4}/g)?.join(' ')}`);
 
     let testuint8array = new Uint8Array([1,4,8,16]);
     console.log(`${testuint8array}\t\t${testuint8array.toBinary()}`)

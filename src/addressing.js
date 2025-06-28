@@ -191,13 +191,13 @@ export class MacAddress {
     static parseString(str) {
         const arr = str.split(':');
         if (arr.length != 6) {
-            return undefined;
+            return null;
         }
         let num_arr = [0, 0, 0, 0, 0, 0];
         for (let i = 0; i < 6; i++) {
             const parsed = parseInt(arr[i], 16);
             if (isNaN(parsed) || parsed < 0 || parsed > 255) {
-                return undefined;
+                return null;
             }
             num_arr[i] = parsed;
         }
@@ -312,13 +312,13 @@ export class Ipv4Address {
     static parseString(str) {
         let arr = str.split('.');
         if (arr.length != 4) {
-            return undefined;
+            return null;
         }
         let num_arr = [0, 0, 0, 0];
         for (let i = 0; i < 4; i++) {
             const parsed = parseInt(arr[i]);
             if (isNaN(parsed) || parsed < 0 || parsed > 255) {
-                return undefined;
+                return null;
             }
             num_arr[i] = parsed;
         }
@@ -353,9 +353,9 @@ function main() {
     test.value = 300.7;
     console.log(`${test}\t${test.toBinary()}`);
     let testmac = new MacAddress([0x9c, 0x00, 0xcd, 0x61, 0x39, 0x48]);
-    console.log(`${testmac}\t${testmac.toBinary().match(/.{1,4}/g).join(' ')}`);
+    console.log(`${testmac}\t${testmac.toBinary().match(/.{1,4}/g)?.join(' ')}`);
     let testipv4 = new Ipv4Address([192, 168, 0, 10]);
-    console.log(`${testipv4}\t\t${testipv4.toBinary().match(/.{1,4}/g).join(' ')}`);
+    console.log(`${testipv4}\t\t${testipv4.toBinary().match(/.{1,4}/g)?.join(' ')}`);
     let testuint8array = new Uint8Array([1, 4, 8, 16]);
     console.log(`${testuint8array}\t\t${testuint8array.toBinary()}`);
 }
