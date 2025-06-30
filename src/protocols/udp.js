@@ -28,6 +28,12 @@ export class UdpDatagram {
         const divided = divide(datagram.slice(0, UdpDatagram._bytes_before_data), UdpDatagram._lengths);
         return new UdpDatagram(src_address, dest_address, divided[0], divided[1], datagram.slice(UdpDatagram._bytes_before_data), divided[3]);
     }
+    static getDataBytes(datagram) {
+        return datagram.slice(UdpDatagram._bytes_before_data);
+    }
+    static getDestPort(datagram) {
+        return datagram[2] * 2 ** 8 + datagram[3];
+    }
 }
 UdpDatagram._lengths = [16, 16, 16, 16];
 UdpDatagram._bytes_before_checksum = 6;

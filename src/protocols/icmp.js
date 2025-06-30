@@ -37,6 +37,18 @@ export class IcmpDatagram {
     get isEchoReply() {
         return this.type == IcmpControlMessage.ECHO_REPLY;
     }
+    get identifier() {
+        if (this.extra_space.length == 4) {
+            return this.extra_space[0] * 2 ** 8 + this.extra_space[1];
+        }
+        return null;
+    }
+    get seq_num() {
+        if (this.extra_space.length == 4) {
+            return this.extra_space[2] * 2 ** 8 + this.extra_space[3];
+        }
+        return null;
+    }
     static echoRequest(identifier, seq_num) {
         return new IcmpDatagram(IcmpControlMessage.ECHO_REQUEST, 0, [...spread([limit(identifier, 16), 16]), ...spread([limit(seq_num, 16), 16])]);
     }
@@ -65,6 +77,13 @@ export class IcmpDatagram {
             output[i] = 16 + i;
         }
         return output;
+    }
+    static verifyIcmpEcho(request_pkt, request_dgram, response_pkt, response_dgram) {
+        return (response_dgram.matchesRequest(request_dgram) && ((response_pkt.src.compare(request_pkt.dest) == 0
+            && response_pkt.dest.compare(request_pkt.src) == 0) ||
+            (response_pkt.src.isLoopback()
+                && response_pkt.dest.isLoopback()))) || (!response_dgram.isEchoReply && !response_dgram.isEchoRequest
+            && response_dgram.data.slice(request_pkt.ihl * 4).every((x, idx) => x == request_pkt.data[idx]));
     }
 }
 IcmpDatagram._lengths = [8, 8, 16, 8, 8, 8, 8];

@@ -6,7 +6,7 @@ import { IcmpControlMessage, IcmpDatagram } from "./protocols/icmp.js";
 import { IdentifiedList, InfMatrix, L2Interface, L3Interface, VirtualL3Interface } from "./interface.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./protocols/ip.js";
 import { RoutingTable } from "./routing.js";
-import { Socket, SocketTable } from "./socket.js";
+import { Socket, SocketTable, SockType } from "./socket.js";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, ICON_SIZE, RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
 import { UdpDatagram } from "./protocols/udp.js";
 import { DhcpClient, DhcpServer } from "./protocols/dhcp.js";
@@ -33,7 +33,7 @@ export class Device {
         this._arp_table = new ArpTable();
         this._network_controller = new NetworkController(this);
         this._env = new Map();
-        this._sockets = new SocketTable();
+        this._sockets = new SocketTable(() => this.getL3Interfaces());
         this._l3infs = [];
         this._l2infs = [];
         this._allow_forwarding = true;
@@ -49,13 +49,13 @@ export class Device {
                 Device.DeviceList.push(this);
             }
         }
-        this._lib = new Libraries(() => this._l2infs.map((l2inf) => ({ "mac_address": l2inf.mac })), () => this._l3infs.map((l3inf) => ({ "mac_address": l3inf.mac, "ipv4_address": l3inf.ipv4, "ipv4_prefix": l3inf.ipv4_prefix })), (packet) => { this.tryEncapsulateAndSend(packet); }, (frame, egress_mac) => {
+        this._lib = new Libraries(() => this.getL2Interfaces(), () => this.getL3Interfaces(), async (dest_ipv4) => this.icmpEcho(dest_ipv4), (packet) => { this.tryEncapsulateAndSend(packet); }, (frame, egress_mac) => {
             if (RECORDING_ON) {
                 const timestamp = performance.now();
                 RECORDED_FRAMES.push([[new DisplayFrame(frame, egress_mac, () => this.coords)], timestamp]);
             }
             setTimeout(() => this.getInfFromMac(egress_mac)?.send(frame), 10);
-        }, (socket) => { this._sockets.addIcmpSocket(socket); }, (socket) => { this._sockets.deleteIcmpSocket(socket); }, (socket) => { this._sockets.addUdpSocket(socket); }, (socket) => { this._sockets.deleteUdpSocket(socket); });
+        }, (sock, address, id) => this._sockets.bind(sock, address, id), (sock) => this._sockets.close(sock));
     }
     static getList() {
         return this.DeviceList;
@@ -81,13 +81,7 @@ export class Device {
      */
     static connectDevices(firstDevice, secondDevice) {
         const firstDevice_inf = [...firstDevice._l2infs, ...firstDevice._l3infs].find((x) => !InfMatrix.isConnected(x.mac));
-        if (firstDevice_inf === undefined) {
-            console.log("first device");
-        }
         const secondDevice_inf = [...secondDevice._l2infs, ...secondDevice._l3infs].find((x) => !InfMatrix.isConnected(x.mac));
-        if (secondDevice_inf === undefined) {
-            console.log("second device");
-        }
         if (firstDevice_inf !== undefined && secondDevice_inf !== undefined) {
             InfMatrix.connect(firstDevice_inf.mac, secondDevice_inf.mac);
             return true;
@@ -117,7 +111,6 @@ export class Device {
     static deleteDevice(x_coord, y_coord) {
         const device = this.getDevice(x_coord, y_coord);
         if (device) {
-            device._sockets.clear();
             for (let l2inf of device._l2infs) {
                 InfMatrix.delete(l2inf);
             }
@@ -127,6 +120,7 @@ export class Device {
                 }
                 InfMatrix.delete(l3inf);
             }
+            device._sockets.clear();
             Device.DeviceList.delete(device);
             return true;
         }
@@ -235,7 +229,7 @@ export class Device {
                 this.getL3InfFromMac(try_egress_mac[1]) ?? this.getInfFromIpv4(try_route[0][1]) :
                 this.getInfFromIpv4(try_route[0][1]);
             // if the local interface exists, try sending a frame
-            if (inf !== undefined) {
+            if (inf !== null) {
                 // use the ARP table to try to get the MAC address of the next hop
                 const try_mac = this._arp_table.get(next_hop);
                 if (try_mac) {
@@ -357,7 +351,7 @@ export class Device {
                     const packet = Ipv4Packet.parsePacket(frame.packet);
                     if (Ipv4Packet.verifyChecksum(packet)) {
                         console.log("IPv4 checksum verification succeeded!");
-                        this.processIpv4(packet);
+                        this.processIpv4(packet, ingress_mac);
                     }
                     else {
                         console.log("IPv4 checksum verification failed!");
@@ -450,7 +444,9 @@ export class Device {
             }
         }
     }
-    async processIpv4(ipv4_packet) {
+    async processIpv4(ipv4_packet, ingress_mac) {
+        // sockets
+        this._sockets.incoming(ipv4_packet.packet, SockType.RAW, ingress_mac.toString(), 0);
         // RFC 1812 5.2.1 may be used as a guide
         if (ipv4_packet.dest.isBroadcast() || this.hasInfWithIpv4(ipv4_packet.dest)) {
             switch (ipv4_packet.protocol) {
@@ -483,38 +479,18 @@ export class Device {
         return false;
     }
     async processICMP(icmp_datagram, ipv4_packet) {
-        // check for any sockets
-        for (let icmp_socket of this._sockets.getIcmpSockets()) {
-            const matched = icmp_socket.check(icmp_datagram, ipv4_packet);
-            console.log(`---------- checking socket: ${matched} ----------`);
-            // one packet can only match one socket
-            if (matched) {
-                break;
-            }
-        }
         switch (icmp_datagram.type) {
             // if the datagram is an Echo Request, send a reply
             case IcmpControlMessage.ECHO_REQUEST:
                 console.log(`!! ICMP Request Received!`);
                 const sent = this.tryEncapsulateAndSend(new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.ICMP, ipv4_packet.dest, ipv4_packet.src, [], IcmpDatagram.echoReply(icmp_datagram).datagram));
                 return sent == IpResponse.SENT;
-            // Note: no packet will be forwarded if it's an Echo Reply
-            // (so this block can be deleted later)
-            case IcmpControlMessage.ECHO_REPLY:
-                console.log(`!! ICMP Reply Received! (there are ${this._sockets.getIcmpSockets().size} sockets)`);
-                return false;
         }
         return false;
     }
     async processUDP(udp_datagram, ipv4_packet) {
-        for (let udp_socket of this._sockets.getUdpSockets()) {
-            const matched = udp_socket.check(udp_datagram, ipv4_packet);
-            console.log(`---------- checking socket: ${matched} ----------`);
-            // one packet can only match one socket
-            if (matched) {
-                break;
-            }
-        }
+        // sockets
+        this._sockets.incoming(udp_datagram.datagram, SockType.DGRAM, ipv4_packet.dest.toString(), udp_datagram.dest_port);
         return false;
     }
     logPing(datagram, packet) {
@@ -528,6 +504,12 @@ export class Device {
     /**
      * Applications
      */
+    getL2Interfaces() {
+        return this._l2infs.map((l2inf) => ({ "mac_address": l2inf.mac }));
+    }
+    getL3Interfaces() {
+        return this._l3infs.map((l3inf) => ({ "mac_address": l3inf.mac, "ipv4_address": l3inf.ipv4, "ipv4_prefix": l3inf.ipv4_prefix }));
+    }
     ping(dest_ipv4, count = Number.MAX_VALUE, ttl = 255, success_func = this.logPing, error_func = this.logError) {
         const id = this._env.has('PING_SEQ') ? parseInt(this._env.get('PING_SEQ') ?? '0') + 1 : 1;
         this._env.set('PING_SEQ', id.toString());
@@ -570,17 +552,29 @@ export class Device {
      * @returns If a response was given, the control message of the response. Otherwise, undefined.
      */
     async icmpEcho(dest_ipv4, id = 1, seq_num = 1, ttl = 255) {
-        if (this.hasL3Infs()) {
-            const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
-            const packet = new Ipv4Packet(0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram);
-            this.tryEncapsulateAndSend(packet);
-            const ping_socket = Socket.icmpSocketFrom(icmp_request, packet);
-            this._sockets.addIcmpSocket(ping_socket);
-            const top = await ping_socket.receive(1000);
-            this._sockets.deleteIcmpSocket(ping_socket);
-            return top;
+        if (!this.hasL3Infs()) {
+            return null;
         }
-        return null;
+        const icmp_request = IcmpDatagram.echoRequest(id, seq_num);
+        const packet = new Ipv4Packet(0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram);
+        const start = performance.now();
+        this.tryEncapsulateAndSend(packet);
+        const sock = new Socket(SockType.RAW);
+        this._sockets.bind(sock, '*', 0);
+        let match = null;
+        let recv_pkt = null;
+        let recv_dgram = null;
+        while (!recv_pkt || !recv_dgram || !IcmpDatagram.verifyIcmpEcho(packet, icmp_request, recv_pkt, recv_dgram)) {
+            match = await sock.receive(1000 - (performance.now() - start));
+            if (!match) {
+                this._sockets.close(sock);
+                return null;
+            }
+            recv_pkt = Ipv4Packet.parsePacket(match);
+            recv_dgram = IcmpDatagram.parse(Ipv4Packet.getDataBytes(match));
+        }
+        this._sockets.close(sock);
+        return [recv_dgram, recv_pkt];
     }
     get dhcp_records() {
         if (this._dhcp_server) {
@@ -623,15 +617,14 @@ export class Device {
 }
 Device.DeviceList = new IdentifiedList();
 export class Libraries {
-    constructor(getL2Interfaces, getL3Interfaces, sendPacket, sendFrame, bindICMP, closeICMP, bindUDP, closeUDP) {
+    constructor(getL2Interfaces, getL3Interfaces, icmpEcho, sendPacket, sendFrame, bind, close) {
         this.getL2Interfaces = getL2Interfaces;
         this.getL3Interfaces = getL3Interfaces;
+        this.icmpEcho = icmpEcho;
         this.sendPacket = sendPacket;
         this.sendFrame = sendFrame;
-        this.bindICMP = bindICMP;
-        this.closeICMP = closeICMP;
-        this.bindUDP = bindUDP;
-        this.closeUDP = closeUDP;
+        this.bind = bind;
+        this.close = close;
     }
 }
 /**
@@ -729,7 +722,11 @@ export class Router extends Device {
         this._dhcp_server = new DhcpServer(this._lib);
     }
     addDefaultRoute(gateway, mac_address) {
-        const quad_zero = new Ipv4Address([0, 0, 0, 0]);
+        const inf_ipv4 = this._l3infs.find((l3inf) => mac_address.compare(l3inf.mac) === 0)?.ipv4;
+        if (!inf_ipv4) {
+            return;
+        }
+        const quad_zero = Ipv4Address.quad_zero;
         const zero_prefix = new Ipv4Prefix(0);
         const try_prev_default_routes = this._routing_table.get(quad_zero, true);
         if (try_prev_default_routes) {
@@ -740,7 +737,7 @@ export class Router extends Device {
                 }
             }
         }
-        this._routing_table.set(quad_zero, zero_prefix, gateway, this._l3infs[0].ipv4, 1);
+        this._routing_table.set(quad_zero, zero_prefix, gateway, inf_ipv4, 1);
     }
 }
 //# sourceMappingURL=device.js.map

@@ -64,4 +64,12 @@ export class UdpDatagram {
             src_address, dest_address, divided[0], divided[1], datagram.slice(UdpDatagram._bytes_before_data), divided[3]
         );
     }
+
+    public static getDataBytes(datagram: Uint8Array): Uint8Array {
+        return datagram.slice(UdpDatagram._bytes_before_data);
+    }
+
+    public static getDestPort(datagram: Uint8Array): number {
+        return datagram[2] * 2**8 + datagram[3];
+    }
 }

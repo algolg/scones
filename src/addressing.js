@@ -238,7 +238,6 @@ export class Ipv4Address {
     }
     set value(arr) {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
-        console.log(`address set to ${this}`);
     }
     get value() {
         return this._value;
@@ -249,8 +248,18 @@ export class Ipv4Address {
     static get broadcast() {
         return new Ipv4Address([255, 255, 255, 255]);
     }
+    static get quad_zero() {
+        return new Ipv4Address([0, 0, 0, 0]);
+    }
+    static get loopback() {
+        return new Ipv4Address([127, 0, 0, 1]);
+    }
     isBroadcast() {
         return this.compare(Ipv4Address.broadcast) == 0;
+    }
+    isLoopback() {
+        const compare = this.compare(Ipv4Address.loopback);
+        return compare === 0 || Math.abs(compare) === 4;
     }
     toBinary() {
         // return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");
@@ -296,10 +305,10 @@ export class Ipv4Address {
     compare(other) {
         for (let i = 0; i < 4; i++) {
             if (this.value[i] > other.value[i]) {
-                return 1;
+                return i + 1;
             }
             else if (this.value[i] < other.value[i]) {
-                return -1;
+                return -i - 1;
             }
         }
         return 0;
@@ -332,7 +341,6 @@ export class Ipv4Prefix {
     }
     set value(ipv4_prefix) {
         this._ipv4_prefix = ipv4_prefix & 0x3F;
-        console.log(`prefix set to ${this._ipv4_prefix}`);
     }
     get value() {
         return this._ipv4_prefix;

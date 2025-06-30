@@ -1,9 +1,9 @@
 import { concat, divide, Ipv4Address, Ipv4Prefix, MacAddress, spread } from "../addressing.js";
 import { Libraries } from "../device.js";
 import { EtherType, Frame } from "../frame.js";
-import { Socket } from "../socket.js";
+import { Socket, SockType } from "../socket.js";
 import { HTYPE } from "./arp.js";
-import { IcmpControlMessage, IcmpDatagram } from "./icmp.js";
+import { IcmpDatagram } from "./icmp.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 import { UdpDatagram } from "./udp.js";
 
@@ -23,7 +23,8 @@ export class DhcpServer {
     private _records: Map<string, [Ipv4Prefix, Ipv4Address]> = new Map();
                     //   network, prefix    , gateway
                     //   address
-    private sock: Socket<UdpDatagram>;
+    private socks: Socket[] = [];
+    private sock_map: Map<Socket, Ipv4Address> = new Map();
 
     private offers_given_mac = new Map<string, Ipv4Address>();
                                     // MAC     IPv4
@@ -35,7 +36,11 @@ export class DhcpServer {
 
     public constructor(lib: Libraries) {
         this.lib = lib;
-        this.sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpServer.PORT);
+        for (const l3inf of this.lib.getL3Interfaces()) {
+            const sock = new Socket(SockType.RAW);
+            this.socks.push(sock);
+            this.sock_map.set(sock, l3inf.ipv4_address);
+        }
     }
 
     public get enabled(): boolean {
@@ -69,11 +74,15 @@ export class DhcpServer {
 
     private enable() {
         this._enabled = true;
-        this.lib.bindUDP(this.sock);
+        for (const [idx,inf] of this.lib.getL3Interfaces().entries())  {
+            this.lib.bind(this.socks[idx], inf.mac_address.toString(), 0);
+        }
 
-        setTimeout(() => {
-            this.listen();
-        }, 0);
+        for (const sock of this.socks) {
+            setTimeout(() => {
+                this.listen(sock);
+            }, 0);
+        }
     }
 
     private disable() {
@@ -81,19 +90,25 @@ export class DhcpServer {
         this.offers_given_mac.clear();
         this.offers_given_ipv4.clear();
 
-        this.sock.kill();
-        this.lib.closeUDP(this.sock);
+        for (const idx of this.lib.getL3Interfaces().keys())  {
+            this.lib.close(this.socks[idx]);
+        }
     }
 
-    private async listen() {
+    private async listen(sock: Socket) {
         while (this._enabled) {
-            const req = await this.sock.receive(5000);
-            if (req && req[0].data) {
-                console.log(`DHCP-SVR: received message`)
-                const request: DhcpPayload = DhcpPayload.parse(req[0].data);
+            const req = await sock.receive(5000);
+            if (req) {
+                const dgram = Ipv4Packet.getDataBytes(req);
+                if (UdpDatagram.getDestPort(dgram) !== DhcpServer.PORT) {
+                    continue;
+                }
+                const request: DhcpPayload = DhcpPayload.parse(UdpDatagram.getDataBytes(dgram));
 
-                // PLACEHOLDER
-                const ingress_ip: Ipv4Address = new Ipv4Address([192,168,0,1]); 
+                const ingress_ip: Ipv4Address | undefined = this.sock_map.get(sock);
+                if (!ingress_ip) {
+                    continue;
+                }
 
                 let message_type_val: [number, Uint8Array] | undefined;
                 if (request.op == OP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE) && (message_type_val = request.options.get(DhcpOptions.MESSAGE_TYPE))) {
@@ -234,21 +249,14 @@ export class DhcpServer {
                 continue;
             }
 
-            const ping = IcmpDatagram.echoRequest(1, 1);
-            const ping_pkt = new Ipv4Packet(0, 0, 64, InternetProtocolNumbers.ICMP, server_ip, try_ip, [], ping.datagram);
-            const sock = Socket.icmpSocketFrom(ping, ping_pkt);
-            this.lib.bindICMP(sock);
+            let resp0: [IcmpDatagram,Ipv4Packet] | null = await this.lib.icmpEcho(try_ip);
+            if ((!resp0 || !resp0[0].isEchoReply)) {
 
-            let resp0: [IcmpDatagram, Ipv4Packet] | null;
-            let resp1: [IcmpDatagram, Ipv4Packet] | null;
-            this.lib.sendPacket(ping_pkt);
-            resp0 = await sock.receive(1000);
-            this.lib.sendPacket(ping_pkt);
-            resp1 = await sock.receive(1000);
+                let resp1: [IcmpDatagram,Ipv4Packet] | null = await this.lib.icmpEcho(try_ip);
+                if ((!resp1 || !resp1[0].isEchoReply)) {
+                    return try_ip
+                }
 
-            this.lib.closeICMP(sock);
-            if ((!resp0 && !resp1) || ((resp0 && resp0[0].type != IcmpControlMessage.ECHO_REPLY) && (resp1 && resp1[0].type != IcmpControlMessage.ECHO_REPLY))) {
-                return try_ip;
             }
         }
         return null;
@@ -267,7 +275,7 @@ export class DhcpClient {
     private setIpAndPrefix: (inf_mac: MacAddress, ipv4_address: Ipv4Address, prefix: Ipv4Prefix) => void;
     private setDefaultGateway: (default_gateway: Ipv4Address, mac_address: MacAddress) => void;
 
-    private active_sockets = new Map<string, Socket<UdpDatagram>>();
+    private active_sockets = new Map<string, Socket>();
                                 //   MAC
     private active_offers = new Map<string, [DhcpPayload, number][]>();
                                 //  MAC
@@ -304,10 +312,9 @@ export class DhcpClient {
         this._enabled.set(mac_str, false);
         this.killed.add(mac_str);
 
-        let sock: Socket<UdpDatagram> | undefined;
+        let sock: Socket | undefined;
         if (sock = this.active_sockets.get(mac_str)) {
-            sock.kill();
-            this.lib.closeUDP(sock);
+            this.lib.close(sock);
         }
         if (this.active_offers.has(mac_str)) {
             this.active_offers.delete(mac_str);
@@ -333,17 +340,17 @@ export class DhcpClient {
         this._enabled.set(egress_mac.toString(), true);
 
         // TODO: should link-local address be used?
-        this.setIpAndPrefix(egress_mac, new Ipv4Address([0,0,0,0]), new Ipv4Prefix(0));
+        this.setIpAndPrefix(egress_mac, Ipv4Address.quad_zero, new Ipv4Prefix(0));
 
         // TODO: confirm and resolve if needed
         // all sockets for a single device are identical -->
         // this will cause issues if DHCP is enabled simultaneously on multiple interfaces
-        let sock: Socket<UdpDatagram> | undefined;
+        let sock: Socket | undefined;
         if (!(sock = this.active_sockets.get(mac_str))) {
-            sock = Socket.udpSocket(Ipv4Address.broadcast, DhcpClient.PORT);
+            sock = new Socket(SockType.RAW);
             this.active_sockets.set(mac_str, sock);
         }
-        this.lib.bindUDP(sock);
+        this.lib.bind(sock, egress_mac.toString(), 0);
 
         setTimeout(() => {
             this.listen(egress_mac);
@@ -356,7 +363,7 @@ export class DhcpClient {
             let offers: [DhcpPayload, number][] | undefined = this.active_offers.get(mac_str);
             if (!offers || this.active_offers.get(mac_str)?.length == 0) {
                 const xid = Math.trunc(Math.random() * (2**32));
-                this.xids.set(xid, [mac_str, performance.now()+this.POLL_LEN]);
+                this.xids.set(xid, [mac_str, now+this.POLL_LEN]);
 
                 const discoverPayload: DhcpPayload = DhcpPayload.dhcpDiscover(xid, egress_mac);
                 const discoverFrame = this.createFrame(discoverPayload, egress_mac);
@@ -370,7 +377,7 @@ export class DhcpClient {
             else {
                 const offer = offers[0];
                 // if there is an unexpired offer, then send a request accordingly
-                if (offer[1] > performance.now()) {
+                if (offer[1] > now) {
 
                     const requestPayload: DhcpPayload = DhcpPayload.dhcpRequest(offer[0].xid, egress_mac, offer[0].siaddr);
                     const requestFrame: Frame = this.createFrame(requestPayload, egress_mac);
@@ -399,8 +406,11 @@ export class DhcpClient {
         const sock = this.active_sockets.get(mac_str);
         while (sock && this._enabled.get(mac_str) && !this.killed.has(mac_str)) {
             const resp = await sock.receive(this.POLL_LEN);
-            if (resp && resp[0].data) {
-                this.processResponse(resp[0].data, egress_mac, mac_str);
+            if (resp) {
+                const dgram = Ipv4Packet.getDataBytes(resp);
+                if (UdpDatagram.getDestPort(dgram) === DhcpClient.PORT) {
+                    this.processResponse(UdpDatagram.getDataBytes(dgram), egress_mac, mac_str);
+                }
             }
         }
     }
@@ -672,6 +682,7 @@ class DhcpPayload {
             const type = options_bytes[i];
 
             if (type == 0x00) {
+                i++;
                 continue;
             }
             if (type == 0xff) {

@@ -103,6 +103,11 @@ export class Ipv4Packet implements Packet {
         return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data, header_checksum);
     }
 
+    public static getDataBytes(packet: Uint8Array): Uint8Array {
+        const ihl: number = packet[0] &= 0b00001111;
+        return packet.slice(ihl * 4);
+    }
+
     public static copyAndDecrement(packet: Ipv4Packet, ttl_decrement: number = 1): Ipv4Packet {
         return new Ipv4Packet(
             packet.dscp, packet.ecn, packet.ttl - ttl_decrement, packet.protocol,

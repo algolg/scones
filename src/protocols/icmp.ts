@@ -51,6 +51,20 @@ export class IcmpDatagram {
         return this.type == IcmpControlMessage.ECHO_REPLY;
     }
 
+    public get identifier(): number | null {
+        if (this.extra_space.length == 4) {
+            return this.extra_space[0] * 2**8 + this.extra_space[1];
+        }
+        return null;
+    }
+
+    public get seq_num(): number | null {
+        if (this.extra_space.length == 4) {
+            return this.extra_space[2] * 2**8 + this.extra_space[3];
+        }
+        return null;
+    }
+
     public static echoRequest(identifier: number, seq_num: number): IcmpDatagram {
         return new IcmpDatagram(
             IcmpControlMessage.ECHO_REQUEST, 0, [...spread([limit(identifier, 16), 16]), ...spread([limit(seq_num, 16), 16])]
@@ -98,5 +112,23 @@ export class IcmpDatagram {
             output[i] = 16 + i;
         }
         return output;
+    }
+
+    public static verifyIcmpEcho(request_pkt: Ipv4Packet, request_dgram: IcmpDatagram, response_pkt: Ipv4Packet, response_dgram: IcmpDatagram): boolean {
+        return (
+            response_dgram.matchesRequest(request_dgram) && (
+                (
+                    response_pkt.src.compare(request_pkt.dest) == 0
+                    && response_pkt.dest.compare(request_pkt.src) == 0
+                ) ||
+                (
+                    response_pkt.src.isLoopback()
+                    && response_pkt.dest.isLoopback()
+                )
+            )
+        ) || (
+            !response_dgram.isEchoReply && !response_dgram.isEchoRequest
+            && response_dgram.data.slice(request_pkt.ihl * 4).every((x,idx) => x == request_pkt.data[idx])
+        );
     }
 }

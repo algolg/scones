@@ -1,5 +1,5 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "../addressing.js";
-import { Device, DeviceType, PersonalComputer, Router } from "../device.js";
+import { Device } from "../device.js";
 import { DisplayFrame } from "../frame.js";
 import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InfLayer, InfMatrix } from "../interface.js";

@@ -286,7 +286,7 @@ export interface GeneralIpAddress {
 }
 
 export class Ipv4Address implements GeneralIpAddress {
-    private _value = new Uint8Array(4);
+    _value = new Uint8Array(4);
 
     public constructor(arr: [number, number, number, number]) {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
@@ -294,7 +294,6 @@ export class Ipv4Address implements GeneralIpAddress {
 
     public set value(arr: [number, number, number, number]) {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
-        console.log(`address set to ${this}`);
     }
 
     public get value(): Uint8Array {
@@ -311,8 +310,21 @@ export class Ipv4Address implements GeneralIpAddress {
         return new Ipv4Address([255, 255, 255, 255]);
     }
 
+    public static get quad_zero(): Ipv4Address {
+        return new Ipv4Address([0, 0, 0, 0]);
+    }
+
+    public static get loopback(): Ipv4Address {
+        return new Ipv4Address([127, 0, 0, 1]);
+    }
+
     public isBroadcast(): boolean {
         return this.compare(Ipv4Address.broadcast) == 0;
+    }
+
+    public isLoopback(): boolean {
+        const compare = this.compare(Ipv4Address.loopback);
+        return compare === 0 || Math.abs(compare) === 4;
     }
 
     public toBinary(): string {
@@ -368,10 +380,10 @@ export class Ipv4Address implements GeneralIpAddress {
     public compare(other: Ipv4Address): number {
         for (let i=0; i<4; i++) {
             if (this.value[i] > other.value[i]) {
-                return 1;
+                return i+1;
             }
             else if (this.value[i] < other.value[i]) {
-                return -1;
+                return -i-1;
             }
         }
         return 0;
@@ -409,7 +421,6 @@ export class Ipv4Prefix {
 
     public set value(ipv4_prefix: number) {
         this._ipv4_prefix = ipv4_prefix & 0x3F;
-        console.log(`prefix set to ${this._ipv4_prefix}`);
     }
 
     public get value(): number {
