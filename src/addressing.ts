@@ -416,11 +416,11 @@ export class Ipv4Prefix {
     protected _ipv4_prefix: number;
 
     public constructor(ipv4_prefix: number) {
-        this._ipv4_prefix = ipv4_prefix & 0x3F;
+        this._ipv4_prefix = (ipv4_prefix & 0x20) || (ipv4_prefix & 0x1F);
     }
 
     public set value(ipv4_prefix: number) {
-        this._ipv4_prefix = ipv4_prefix & 0x3F;
+        this._ipv4_prefix = (ipv4_prefix & 0x20) || (ipv4_prefix & 0x1F);
     }
 
     public get value(): number {

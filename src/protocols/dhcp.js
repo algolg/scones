@@ -198,7 +198,6 @@ export class DhcpServer {
         if (!ip_info || !ip_info.ipv4_address || !ip_info.ipv4_prefix) {
             return null;
         }
-        const server_ip = ip_info.ipv4_address.and(new Ipv4Prefix(32));
         const network_address = ip_info.ipv4_address.and(ip_info.ipv4_prefix);
         const network_address_str = network_address.toString();
         let record;
@@ -206,7 +205,7 @@ export class DhcpServer {
             return null;
         }
         const [prefix, router_address] = record;
-        return [server_ip, prefix, router_address];
+        return [ip_info.ipv4_address, prefix, router_address];
     }
     async findAvailableIpAddress(server_mac) {
         const record_details = this.getRecordDetailsFromServerMac(server_mac);

@@ -221,7 +221,6 @@ export class DhcpServer {
             return null;
         }
 
-        const server_ip: Ipv4Address = ip_info.ipv4_address.and(new Ipv4Prefix(32));
         const network_address: Ipv4Address = ip_info.ipv4_address.and(ip_info.ipv4_prefix)
         const network_address_str = network_address.toString()
         let record: [Ipv4Prefix, Ipv4Address] | undefined;
@@ -230,7 +229,7 @@ export class DhcpServer {
         }
         const [prefix, router_address] = record;
 
-        return [server_ip, prefix, router_address];
+        return [ip_info.ipv4_address, prefix, router_address];
     }
 
 

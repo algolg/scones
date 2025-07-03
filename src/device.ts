@@ -251,6 +251,9 @@ export abstract class Device implements IdentifiedItem {
         return true;
     }
 
+    // TODO: create a similar function which accepts a datagram and destination and creates (and possible sends)
+    // a packet with the correct source IP
+
     /**
      * Encapsulates and attempts to send a packet
      * @param packet The packet to encapsulate as a frame and send
@@ -648,7 +651,9 @@ export abstract class Device implements IdentifiedItem {
             0, 0, ttl, InternetProtocolNumbers.ICMP, this._l3infs[0].ipv4, dest_ipv4, [], icmp_request.datagram
         );
 
-        const start = performance.now();
+        const start: number = performance.now();
+        let now: number = start;
+
         this.tryEncapsulateAndSend(packet);
         const sock = new Socket(SockType.RAW);
 
@@ -657,19 +662,24 @@ export abstract class Device implements IdentifiedItem {
         let match: Uint8Array | null = null;
         let recv_pkt: Ipv4Packet | null = null;
         let recv_dgram: IcmpDatagram | null = null;
-        while (!recv_pkt || !recv_dgram || !IcmpDatagram.verifyIcmpEcho(packet, icmp_request, recv_pkt, recv_dgram)) {
+        while ((now - start < 1000) && (!recv_pkt || !recv_dgram || !IcmpDatagram.verifyIcmpEcho(packet, icmp_request, recv_pkt, recv_dgram))) {
 
-            match = await sock.receive(1000 - (performance.now() - start));
+            now = performance.now();
+            match = await sock.receive(1000 - (now - start));
             if (!match) {
                 this._sockets.close(sock);
                 return null;
             }
             recv_pkt = Ipv4Packet.parsePacket(match);
-            recv_dgram = IcmpDatagram.parse(Ipv4Packet.getDataBytes(match));
+            recv_dgram = IcmpDatagram.parse(recv_pkt.data);
 
         }
 
         this._sockets.close(sock);
+        if (!recv_dgram || !recv_pkt) {
+            return null;
+        }
+
         return [recv_dgram, recv_pkt];
     }
 

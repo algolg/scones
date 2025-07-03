@@ -17,7 +17,7 @@ export class Socket {
     }
     /**
      * Copies data to buffer
-     * @param data to push to buffer
+     * @param data Data to push to buffer
      */
     copy(data) {
         this._buffer.push(data);
@@ -174,7 +174,7 @@ export class SocketTable {
      * @param type The type of socket to match
      * @param address The address being targetted (IPv4 for DGRAM/STREAM, MAC or '*' for RAW)
      * @param id The ID to match (port number for DGRAM/STREAM, 0 for RAW)
-     * @returns
+     * @returns The number of matched sockets
      */
     incoming(data, type, address, id) {
         let total = 0;

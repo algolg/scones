@@ -6,23 +6,51 @@ import { parseIpv4Address, parseNumber } from "./configure.js";
 import { clearFocus } from "./topology.js";
 import { ROUTER_INF_NUM, SWITCH_INF_NUM } from "./variables.js";
 
+interface Env {
+    devices: EnvDevice[];
+    interfaces: [string, string][];
+}
+
+interface EnvDevice {
+    type: DeviceType;
+    coords: [number, number];
+    l3infs: [string, string, number][];
+    l2infs: string[];
+    routes: [string, string, string, number][];
+    servers: EnvServers | null;
+}
+
+interface EnvServers {
+    dhcp: EnvDhcpRecord[] | null;
+}
+
+interface EnvDhcpRecord {
+    dhcp_pool_network: string;
+    dhcp_pool_prefix: number;
+    dhcp_router_ipv4_address: string;
+}
+
 const fileUpload = document.getElementById('environment-file-upload');
 
 function exportEnvironment(anchor: HTMLAnchorElement) {
-    const env = JSON.stringify({
+    const env: Env = {
         "devices": (Device.getList().map((device) => (
             {
                 "type": device.device_type,
                 "coords": device.coords,
                 "l3infs": device.l3infs.map((inf) => [inf.mac.toString(), inf.ipv4.toString(), inf.ipv4_prefix.value]),
                 "l2infs": device.l2infs.map((inf) => inf.mac.toString()),
-                "routes": device.getAllRoutes()?.map((route) => [route[0], route[1].toString(), route[2].toString(), route[3]]) ?? []
+                "routes": device.getAllRoutes()?.map((route) => [route[0], route[1].toString(), route[2].toString(), route[3]]) ?? [],
+                "servers": device.hasDhcpServer() ? {
+                    "dhcp": device.dhcp_records?.map((record) => ({"dhcp_pool_network": record[0].toString(), "dhcp_pool_prefix": record[1].value, "dhcp_router_ipv4_address": record[2].toString()})) ?? null
+                } : null
             }
         ))),
-        "interfaces": (InfMatrix.adjacency_list.map((infs) => [infs[0].mac.toString(), infs[1].mac.toString()]))
-    });
+        "interfaces": InfMatrix.adjacency_list.map((infs) => [infs[0].mac.toString(), infs[1].mac.toString()])
+    };
 
-    const data = `text/json;charset=utf-8,${encodeURIComponent(env)}`;
+    const env_str = JSON.stringify(env);
+    const data = `text/json;charset=utf-8,${encodeURIComponent(env_str)}`;
 
     anchor.setAttribute('href', `data:${data}`);
     anchor.setAttribute('download', 'environment.json');
@@ -39,21 +67,23 @@ async function loadJSON(input: HTMLInputElement) {
     }
     const json_str = await input.files[0].text();
     try {
-        let object: any = JSON.parse(json_str);
-        const devices = object['devices'];
-        const interfaces: [string, string][] = object['interfaces'];
+        let obj: Env = JSON.parse(json_str);
+        const devices = obj.devices;
+        const interfaces: [string, string][] = obj.interfaces;
 
         const mac_map = new Map<string,string>();
         
         Device.clearTopology();
         for (let device of devices) {
-            const coords: [number, number] = device['coords'];
-            const l3infs: [string,string,number][] = device['l3infs'];
-            const l2infs: string[] = device['l2infs'];
-            const routes: [string, string, string, number][] = device['routes'];
+
+            const coords: [number, number] = device.coords;
+            const l3infs: [string,string,number][] = device.l3infs;
+            const l2infs: string[] = device.l2infs;
+            const routes: [string, string, string, number][] = device.routes;
+            const servers = device.servers;
 
             let new_device!: Device;
-            switch (device['type']) {
+            switch (device.type) {
                 case (DeviceType.PC):
                 case (DeviceType.SERVER):
                     new_device = new PersonalComputer();
@@ -90,8 +120,26 @@ async function loadJSON(input: HTMLInputElement) {
                     route[3]
                 );
             }
+            if (servers) {
+                for (const server_type of Object.keys(servers)) {
+                    switch (server_type) {
+                        case "dhcp":
+                            if (!new_device.hasDhcpServer() || !servers.dhcp) {
+                                throw "invalid format";
+                            }
+                            for (const record of servers.dhcp) {
+                                new_device.addDhcpRecord(
+                                    parseIpv4Address(record.dhcp_pool_network),
+                                    new Ipv4Prefix(record.dhcp_pool_prefix),
+                                    parseIpv4Address(record.dhcp_router_ipv4_address)
+                                )
+                            }
+                            break;
+                    }
+                }
+            }
 
-            new_device.coords = [coords[0], coords[1]];
+            new_device.coords = coords;
         }
 
         for (let pair of interfaces) {

@@ -337,10 +337,10 @@ export class Ipv4Address {
 Ipv4Address.byteLength = 4;
 export class Ipv4Prefix {
     constructor(ipv4_prefix) {
-        this._ipv4_prefix = ipv4_prefix & 0x3F;
+        this._ipv4_prefix = (ipv4_prefix & 0x20) || (ipv4_prefix & 0x1F);
     }
     set value(ipv4_prefix) {
-        this._ipv4_prefix = ipv4_prefix & 0x3F;
+        this._ipv4_prefix = (ipv4_prefix & 0x20) || (ipv4_prefix & 0x1F);
     }
     get value() {
         return this._ipv4_prefix;
