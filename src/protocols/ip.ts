@@ -103,6 +103,11 @@ export class Ipv4Packet implements Packet {
         return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data, header_checksum);
     }
 
+    public static getProto(packet: Uint8Array): InternetProtocolNumbers {
+        const proto_byte = 9;
+        return packet[proto_byte];
+    }
+
     public static getDataBytes(packet: Uint8Array): Uint8Array {
         const ihl: number = packet[0] &= 0b00001111;
         return packet.slice(ihl * 4);

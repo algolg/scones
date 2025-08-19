@@ -306,15 +306,17 @@ export function displayFrames() {
     }
 }
 
-function refreshL3InfLabels() {
+export function refreshL3InfLabels() {
     if (!focusedDevice) {
         return;
     }
 
     const labels = document.getElementsByClassName('interface-label');
-    if (labels.length != focusedDevice.l3infs.length) {
+    const dhcp_toggles = <HTMLCollectionOf<HTMLInputElement>> document.getElementsByClassName('toggle-dhcp');
+    if (labels.length !== focusedDevice.l3infs.length || dhcp_toggles.length !== focusedDevice.l3infs.length) {
         return;
     }
+
     Array.from(labels).forEach((label,idx) => {
         const current_inf = focusedDevice!.l3infs[idx];
         label.innerHTML = `
@@ -323,6 +325,15 @@ function refreshL3InfLabels() {
             <div class="info-2">${current_inf.layer == InfLayer.L2 ? "Bridging" : "Routing"}</div>
             <div class="info-3">${current_inf.layer == InfLayer.L3 ? current_inf.ipv4 : ''}</div>
         `
+    });
+
+    Array.from(dhcp_toggles).forEach((toggle,idx) => {
+        const current_mac = focusedDevice!.l3infs[idx].mac;
+        const dhcp_enabled = focusedDevice?.dhcpEnabled(current_mac);
+
+        if (dhcp_enabled !== undefined) {
+            toggle.checked = dhcp_enabled;
+        }
     });
 }
 
@@ -538,12 +549,13 @@ function toggleDhcpClient(ele: HTMLInputElement, mac_string: string) {
     if (!mac) {
         return;
     }
-
+    
     const device = focusedDevice;
 
+    const initial = focusedDevice.dhcpEnabled(mac);
     const result = device.toggleDhcpClient(mac);
     // XOR the checkbox value and the result value to get the new checkbox value
-    ele.checked !== result;
+    ele.checked = initial != result;
 } (<any>window).toggleDhcpClient = toggleDhcpClient;
 
 function addDhcpRecord() {

@@ -2,6 +2,7 @@ import { concat, divide, Ipv4Address, Ipv4Prefix, MacAddress, spread } from "../
 import { Libraries } from "../device.js";
 import { EtherType, Frame } from "../frame.js";
 import { Socket, SockType } from "../socket.js";
+import { refreshL3InfLabels } from "../ui/configure.js";
 import { HTYPE } from "./arp.js";
 import { IcmpDatagram } from "./icmp.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
@@ -98,7 +99,7 @@ export class DhcpServer {
     private async listen(sock: Socket) {
         while (this._enabled) {
             const req = await sock.receive(5000);
-            if (req) {
+            if (req && Ipv4Packet.getProto(req) === InternetProtocolNumbers.UDP) {
                 const dgram = Ipv4Packet.getDataBytes(req);
                 if (UdpDatagram.getDestPort(dgram) !== DhcpServer.PORT) {
                     continue;
@@ -318,6 +319,7 @@ export class DhcpClient {
         if (this.active_offers.has(mac_str)) {
             this.active_offers.delete(mac_str);
         }
+        refreshL3InfLabels();
 
         setTimeout(() => {
             this.killed.delete(mac_str);
@@ -340,10 +342,8 @@ export class DhcpClient {
 
         // TODO: should link-local address be used?
         this.setIpAndPrefix(egress_mac, Ipv4Address.quad_zero, new Ipv4Prefix(0));
+        refreshL3InfLabels();
 
-        // TODO: confirm and resolve if needed
-        // all sockets for a single device are identical -->
-        // this will cause issues if DHCP is enabled simultaneously on multiple interfaces
         let sock: Socket | undefined;
         if (!(sock = this.active_sockets.get(mac_str))) {
             sock = new Socket(SockType.RAW);
@@ -370,7 +370,7 @@ export class DhcpClient {
                 console.log(`DHCP-CLT: SENDING DISCOVER`)
                 this.lib.sendFrame(discoverFrame, egress_mac);
 
-                await sock.wait(this.POLL_LEN);
+                await waitFor(() => !(!this.active_offers.get(mac_str) || this.active_offers.get(mac_str)?.length == 0), this.POLL_LEN);
                 await wait(100);
             }
             else {
@@ -384,8 +384,7 @@ export class DhcpClient {
                     console.log(`DHCP-CLT: SENDING REQUEST`)
                     this.lib.sendFrame(requestFrame, egress_mac);
 
-                    await sock.wait(this.POLL_LEN);
-                    await wait(100);
+                    await wait(this.POLL_LEN + 100);
                 }
                 // if the top request is expired, then delete the expired offers
                 // (active_offers is FIFO)
@@ -405,7 +404,7 @@ export class DhcpClient {
         const sock = this.active_sockets.get(mac_str);
         while (sock && this._enabled.get(mac_str) && !this.killed.has(mac_str)) {
             const resp = await sock.receive(this.POLL_LEN);
-            if (resp) {
+            if (resp && Ipv4Packet.getProto(resp) === InternetProtocolNumbers.UDP) {
                 const dgram = Ipv4Packet.getDataBytes(resp);
                 if (UdpDatagram.getDestPort(dgram) === DhcpClient.PORT) {
                     this.processResponse(UdpDatagram.getDataBytes(dgram), egress_mac, mac_str);
@@ -433,6 +432,7 @@ export class DhcpClient {
 
         const message_type = message_type_val[1][0];
         if (message_type == DhcpMessageType.DHCPOFFER) {
+            console.log(`DHCP-CLT: RECEIVED OFFER`)
             const offers: [DhcpPayload, number][] = this.active_offers.get(mac_str) ?? [];
             if (!this.active_offers.has(mac_str)) {
                 this.active_offers.set(mac_str, offers);
@@ -446,6 +446,7 @@ export class DhcpClient {
             response.options.get(DhcpOptions.SUBNET_MASK) &&
             response.options.get(DhcpOptions.SUBNET_MASK)![0] == 4
         ) {
+            console.log(`DHCP-CLT: RECEIVED ACK`)
             let selected_offer: [DhcpPayload, number] | null = null;
 
             const relevant_offers = this.active_offers.get(mac_str);
@@ -457,6 +458,7 @@ export class DhcpClient {
             }
 
             if (selected_offer) {
+                console.log(`DHCP-CLT: SETTING NETWORK INFO`)
                 this.active_offers.delete(mac_str);
                 // set IP address, prefix, etc.
                 this.setNetworkInfo(selected_offer[0], egress_mac);
@@ -712,4 +714,23 @@ class DhcpPayload {
 
 async function wait(ns: number): Promise<void> {
     return new Promise((x) => setTimeout((x), ns));
+}
+
+async function waitFor(func: () => boolean, timeout_ms: number, polling_interval: number = 100): Promise<boolean> {
+    return new Promise((resolve) => {
+        const start = performance.now();
+        const interval = setInterval(() => {
+            const finished = func();
+            if (finished) {
+                console.log('------- finished!')
+                clearInterval(interval);
+                resolve(true);
+            }
+            const timed_out = (performance.now() - start) >= timeout_ms - polling_interval;
+            if (timed_out) {
+                clearInterval(interval);
+                resolve(false)
+            }
+        }, polling_interval)
+    });
 }

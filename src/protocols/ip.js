@@ -72,6 +72,10 @@ export class Ipv4Packet {
         const data = packet.slice(ihl * 4);
         return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data, header_checksum);
     }
+    static getProto(packet) {
+        const proto_byte = 9;
+        return packet[proto_byte];
+    }
     static getDataBytes(packet) {
         const ihl = packet[0] &= 0b00001111;
         return packet.slice(ihl * 4);
