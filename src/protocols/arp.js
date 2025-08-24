@@ -5,11 +5,11 @@ export var HTYPE;
     HTYPE[HTYPE["ETHERNET"] = 1] = "ETHERNET";
 })(HTYPE || (HTYPE = {}));
 // enum PTYPE { IPv4 = 0x0800 }
-export var OP;
-(function (OP) {
-    OP[OP["REQUEST"] = 1] = "REQUEST";
-    OP[OP["REPLY"] = 2] = "REPLY";
-})(OP || (OP = {}));
+export var ArpOP;
+(function (ArpOP) {
+    ArpOP[ArpOP["REQUEST"] = 1] = "REQUEST";
+    ArpOP[ArpOP["REPLY"] = 2] = "REPLY";
+})(ArpOP || (ArpOP = {}));
 ;
 export class ArpPacket {
     constructor(op, src_ha, src_pa, dest_ha = MacAddress.broadcast, dest_pa) {
@@ -67,7 +67,7 @@ export class ArpPacket {
      * @returns the reply ARP packet
      */
     makeReply(new_src_ha) {
-        return new ArpPacket(OP.REPLY, new_src_ha, this.dest_pa, this.src_ha, this.src_pa);
+        return new ArpPacket(ArpOP.REPLY, new_src_ha, this.dest_pa, this.src_ha, this.src_pa);
     }
 }
 ArpPacket._lengths = [16, 16, 8, 8, 16, 48, 32, 48, 32];

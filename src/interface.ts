@@ -1,5 +1,5 @@
 import { Identifier, Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing.js";
-import { ArpPacket, OP } from "./protocols/arp.js";
+import { ArpPacket, ArpOP } from "./protocols/arp.js";
 import { IdentifiedItem, NetworkController } from "./device.js";
 import { DisplayFrame, EtherType, Frame } from "./frame.js";
 import { RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
@@ -497,7 +497,7 @@ export class L3Interface extends Interface {
      * @param ip the neighbor's IPv4 address
      */
     public find(ip: Ipv4Address): boolean {
-        const arppacket = new ArpPacket(OP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
+        const arppacket = new ArpPacket(ArpOP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
         const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
         setTimeout(() => {
             if (RECORDING_ON) {

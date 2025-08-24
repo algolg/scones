@@ -1,17 +1,19 @@
-import { ArpPacket, OP } from "../protocols/arp.js";
+import { ArpPacket, ArpOP } from "../protocols/arp.js";
 import { EtherType, Frame } from "../frame.js";
 import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "../protocols/ip.js";
 import { Protocol } from "./variables.js";
+import { UdpDatagram, UdpPorts } from "../protocols/udp.js";
+import { DhcpMessageType, DhcpOP, DhcpOptions, DhcpPayload } from "../protocols/dhcp.js";
 
-export function getExplanation(frame: Frame): [Protocol, string] {
+export function getExplanation(frame: Frame): [Protocol[], string] {
     const ethertype = frame.ethertype;
 
     let type: string = "";
     let from: string = "";
     let to: string = "";
     let description: string = "";
-    let protocol: Protocol;
+    let protocols: Protocol[] = [];
 
     let extra_fields_name: string[] = []
     let extra_fields_val: string[] = []
@@ -20,17 +22,17 @@ export function getExplanation(frame: Frame): [Protocol, string] {
 
     }
     else if (ethertype == EtherType.ARP) {
-        protocol = Protocol.ARP;
+        protocols = [Protocol.ARP];
         const packet = ArpPacket.parsePacket(frame.packet);
 
         from = packet.src_pa.toString();
         to = packet.dest_pa.toString();
         switch (packet.op) {
-            case OP.REQUEST:
+            case ArpOP.REQUEST:
                 type = 'Request';
                 description = `Requesting the MAC address of the interface which has IP address ${to}`;
                 break;
-            case OP.REPLY:
+            case ArpOP.REPLY:
                 type = 'Reply';
                 description = `IP address ${from} has MAC address ${packet.src_ha}`;
                 break;
@@ -40,7 +42,7 @@ export function getExplanation(frame: Frame): [Protocol, string] {
         }
     }
     else if (ethertype == EtherType.IPv4) {
-        protocol = Protocol.IPv4;
+        protocols = [Protocol.IPv4];
         const packet = Ipv4Packet.parsePacket(frame.packet);
 
         extra_fields_name.push("TTL");
@@ -50,11 +52,15 @@ export function getExplanation(frame: Frame): [Protocol, string] {
         to = packet.dest.toString();
         switch (packet.protocol) {
             case InternetProtocolNumbers.ICMP:
-                protocol = Protocol.ICMP;
+                protocols = [Protocol.ICMP];
                 [type, description] = getICMPExplanation(packet);
                 break;
             case InternetProtocolNumbers.UDP:
-                protocol = Protocol.UDP;
+                protocols = [Protocol.UDP];
+                let src_port: number, dest_port: number;
+                [src_port, dest_port, type, description] = getUDPExplanation(packet, protocols);
+                from += ':' + src_port;
+                to += ':' + dest_port;
                 // TODO: ADD INFO FOR UDP
                 break;
         }
@@ -76,7 +82,7 @@ export function getExplanation(frame: Frame): [Protocol, string] {
     <div class="packet-description">${description}</div>
     `;
 
-    return [protocol!, explanation];
+    return [protocols, explanation];
 }
 
 function getICMPExplanation(packet: Ipv4Packet): [string, string] {
@@ -121,4 +127,75 @@ function getICMPExplanation(packet: Ipv4Packet): [string, string] {
     }
 
     return [type_str, explanation];
+}
+
+function getUDPExplanation(packet: Ipv4Packet, protocols: Protocol[]): [number, number, string, string] {
+    const datagram = packet.data;
+    const src_port = UdpDatagram.getSrcPort(datagram);
+    const dest_port = UdpDatagram.getDestPort(datagram);
+
+    let type_str: string = "";
+    let explanation: string = "";
+
+    switch (dest_port) {
+        case UdpPorts.DhcpServer:
+            // should DhcpServer and DhcpClient have different conditions for packet parsing?
+            // probably not, right?
+            // Dhcp Payload formats are the same for both?
+            // just have to check if it's a discover / offer / request / acknowledge ?
+        case UdpPorts.DhcpClient:
+            protocols.push(Protocol.DHCP);
+            [type_str, explanation] = getDHCPExplanation(datagram);
+            break;
+        default:
+            break
+    }
+
+    return [
+        src_port,
+        dest_port,
+        type_str,
+        explanation
+    ];
+}
+
+function getDHCPExplanation(udp_datagram: Uint8Array): [string, string] {
+    const dhcp_payload = DhcpPayload.parse(UdpDatagram.getDataBytes(udp_datagram));
+    const chaddr = Array.from(dhcp_payload.chaddr.slice(0,6)).map((x) => x.toString(16)).join(':');
+    const server_ipv4 = dhcp_payload.siaddr;
+    const your_ipv4 = dhcp_payload.yiaddr;
+
+    let type_str: string = '';
+    let explanation: string = '';
+
+    const message_type_val: [number, Uint8Array] | undefined = dhcp_payload.options.get(DhcpOptions.MESSAGE_TYPE);
+    if (message_type_val) {
+        const message_type = message_type_val[1][0];
+        if (dhcp_payload.op == DhcpOP.BOOTREQUEST) {
+            switch (message_type) {
+                case DhcpMessageType.DHCPDISCOVER:
+                    type_str = 'Discover';
+                    explanation = `Device ${chaddr} is searching for a DHCP server on the local network`;
+                    break;
+                case DhcpMessageType.DHCPREQUEST:
+                    type_str = 'Request';
+                    explanation = `Device ${chaddr} is requesting an IP address from DHCP server ${server_ipv4}`;
+                    break;
+            }
+        }
+        else if (dhcp_payload.op == DhcpOP.BOOTREPLY) {
+            switch (message_type) {
+                case DhcpMessageType.DHCPOFFER:
+                    type_str = 'Offer';
+                    explanation = `DHCP server ${server_ipv4} advertises itself to device ${chaddr}`;
+                    break;
+                case DhcpMessageType.DHCPACK:
+                    type_str = 'Acknowledge';
+                    explanation = `DHCP server ${server_ipv4} leases the IP address ${your_ipv4} to device ${chaddr}`
+                    break;
+            }
+        }
+    }
+
+    return [type_str, explanation]
 }

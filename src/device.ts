@@ -1,5 +1,5 @@
 import { Ipv4Address, Identifier, DeviceID, MacAddress, Ipv4Prefix } from "./addressing.js";
-import { ArpPacket, ArpTable, OP } from "./protocols/arp.js";
+import { ArpPacket, ArpTable, ArpOP } from "./protocols/arp.js";
 import { ForwardingInformationBase } from "./forwarding.js";
 import { DisplayFrame, EtherType, Frame } from "./frame.js";
 import { IcmpControlMessage, IcmpDatagram } from "./protocols/icmp.js";
@@ -505,7 +505,7 @@ export abstract class Device implements IdentifiedItem {
             if (!merge) {
                 this._arp_table.set(arp_request.src_pa, arp_request.src_ha, ingress_mac);
             }
-            if (op == OP.REQUEST) {
+            if (op == ArpOP.REQUEST) {
                 should_forward.value = false
                 const arp_reply = arp_request.makeReply(try_inf.mac);
                 const frame = new Frame(arp_reply.dest_ha, try_inf.mac, EtherType.ARP, arp_reply.packet);

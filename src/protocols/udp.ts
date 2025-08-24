@@ -1,6 +1,8 @@
 import { concat, divide, Ipv4Address, limit, spread } from "../addressing.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 
+export enum UdpPorts { DhcpServer = 67, DhcpClient = 68 }
+
 export class UdpDatagram {
     readonly src_port: number;
     readonly dest_port: number;
@@ -67,6 +69,10 @@ export class UdpDatagram {
 
     public static getDataBytes(datagram: Uint8Array): Uint8Array {
         return datagram.slice(UdpDatagram._bytes_before_data);
+    }
+
+    public static getSrcPort(datagram: Uint8Array): number {
+        return datagram[0] * 2**8 + datagram[1];
     }
 
     public static getDestPort(datagram: Uint8Array): number {

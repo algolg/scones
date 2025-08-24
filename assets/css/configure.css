@@ -196,6 +196,13 @@ input[name=toggle-dhcp]:checked ~ .toggle-dhcp-postlabel::before {
     color: #b32828;
 }
 
+.dhcp-label.udp-label::after {
+    content: '[UDP]';
+    font-size: 0.8em;
+    margin-left: 0.5em;
+    filter: grayscale(0.4) saturate(0.4) brightness(1.4);
+}
+
 #frame-selectors {
     margin: 0.25em 0.3em;
 }

@@ -172,16 +172,19 @@ const dhcpServerTool = (records: [Readonly<Ipv4Address>, Readonly<Ipv4Prefix>, R
     `
 }
 
-const frameListing = (display_frame_set: DisplayFrame[], idx: number, frame_coords: [number, number][], frame_angle: number[], protocol: Protocol, explanation: string) => {
+const frameListing = (display_frame_set: DisplayFrame[], idx: number, frame_coords: [number, number][], frame_angle: number[], protocols: Protocol[], explanation: string) => {
     let onchangeParam = [];
     for (let i=0; i<frame_coords.length; i++) {
         onchangeParam.push(`[${frame_coords[i][0]}, ${frame_coords[i][1]}, ${frame_angle[i]}]`);
     }
+
+    const protocols_class_prefixes = protocols.map((p) => Protocol[p].toLowerCase());
+    // const protocol_str = protocols.map((p) => Protocol[p]).reverse().join(' [') + ']'.repeat(protocols.length - 1);
     return `
-    <div class="config-option frame-listing ${Protocol[protocol].toLowerCase()}-frame">
+    <div class="config-option frame-listing ${protocols_class_prefixes.map((p) => `${p}-frame`).join(' ')}">
         <input id="frame${idx}-dropdown" onchange="drawFrame(${onchangeParam.join(',')})" class="option-dropdown" name="frame-selector" type="radio">
         <label for="frame${idx}-dropdown" class="option-dropdown-label frame-label">
-            <div class="ethertype ${Protocol[protocol].toLowerCase()}-label">${Protocol[protocol]}</div>
+            <div class="ethertype ${protocols_class_prefixes.map((p) => `${p}-label`).join(' ')}">${Protocol[protocols[protocols.length-1]]}</div>
             <div class="info-1">${display_frame_set[0].frame.src_mac} to ${display_frame_set[0].frame.dest_mac}</div>
         </label>
         <div class="option-dropdown-contents">

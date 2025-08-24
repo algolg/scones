@@ -5,6 +5,7 @@ export var Protocol;
     Protocol[Protocol["ARP"] = 2] = "ARP";
     Protocol[Protocol["TCP"] = 3] = "TCP";
     Protocol[Protocol["UDP"] = 4] = "UDP";
+    Protocol[Protocol["DHCP"] = 5] = "DHCP";
 })(Protocol || (Protocol = {}));
 ;
 const canvas = document.getElementById('canvas');

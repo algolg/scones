@@ -1,6 +1,6 @@
 import { DisplayFrame } from "../frame.js";
 
-export enum Protocol { IPv4, ICMP, ARP, TCP, UDP };
+export enum Protocol { IPv4, ICMP, ARP, TCP, UDP, DHCP };
 
 const canvas = <HTMLCanvasElement>document.getElementById('canvas');
 

@@ -1,5 +1,10 @@
 import { concat, divide, limit, spread } from "../addressing.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
+export var UdpPorts;
+(function (UdpPorts) {
+    UdpPorts[UdpPorts["DhcpServer"] = 67] = "DhcpServer";
+    UdpPorts[UdpPorts["DhcpClient"] = 68] = "DhcpClient";
+})(UdpPorts || (UdpPorts = {}));
 export class UdpDatagram {
     constructor(src_address, dest_address, src_port, dest_port, data, checksum) {
         this.checksum = new Uint8Array(2);
@@ -30,6 +35,9 @@ export class UdpDatagram {
     }
     static getDataBytes(datagram) {
         return datagram.slice(UdpDatagram._bytes_before_data);
+    }
+    static getSrcPort(datagram) {
+        return datagram[0] * 2 ** 8 + datagram[1];
     }
     static getDestPort(datagram) {
         return datagram[2] * 2 ** 8 + datagram[3];

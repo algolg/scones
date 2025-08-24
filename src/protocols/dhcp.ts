@@ -8,13 +8,13 @@ import { IcmpDatagram } from "./icmp.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 import { UdpDatagram } from "./udp.js";
 
-enum DhcpOptions {
+export enum DhcpOptions {
     SUBNET_MASK = 1, TIME_OFFSET, ROUTER, TIME_SERVER, NAME_SERVER, DOMAIN_NAME_SERVER,
     LEASE_TIME = 51,
     MESSAGE_TYPE = 53,
     PARAMETER_REQUEST_LIST = 55
 };
-enum DhcpMessageType {
+export enum DhcpMessageType {
     DHCPDISCOVER = 1, DHCPOFFER, DHCPREQUEST, DHCPDECLINE, DHCPACK, DHCPNACK, DHCPRELEASE, DHCPINFORM
 }
 
@@ -112,7 +112,7 @@ export class DhcpServer {
                 }
 
                 let message_type_val: [number, Uint8Array] | undefined;
-                if (request.op == OP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE) && (message_type_val = request.options.get(DhcpOptions.MESSAGE_TYPE))) {
+                if (request.op == DhcpOP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE) && (message_type_val = request.options.get(DhcpOptions.MESSAGE_TYPE))) {
                     const message_type = message_type_val[1][0];
                     if (message_type == DhcpMessageType.DHCPDISCOVER) {
                         setTimeout(() => {
@@ -185,6 +185,9 @@ export class DhcpServer {
             return
         }
         const [server_ip, prefix, router_address] = record_details;
+        if (dhcp_payload.siaddr.compare(server_ip) !== 0) {
+            return;
+        }
 
         const chaddr_arr: Uint8Array = dhcp_payload.chaddr.slice(0,6);
         const chaddr = new MacAddress([
@@ -420,7 +423,7 @@ export class DhcpClient {
         const now = performance.now();
         let message_type_val = response.options.get(DhcpOptions.MESSAGE_TYPE);
         if (
-            response.op != OP.BOOTREPLY ||
+            response.op != DhcpOP.BOOTREPLY ||
             !message_type_val ||
             !(xid_record = this.xids.get(response.xid)) ||
             xid_record[1] <= now ||
@@ -512,10 +515,10 @@ export class DhcpClient {
     }
 }
 
-enum OP { BOOTREQUEST = 1, BOOTREPLY };
+export enum DhcpOP { BOOTREQUEST = 1, BOOTREPLY };
 
-class DhcpPayload {
-    readonly op: OP;
+export class DhcpPayload {
+    readonly op: DhcpOP;
     readonly htype: HTYPE;
     readonly hlen: number = MacAddress.byteLength;
     readonly hops: number;
@@ -546,7 +549,7 @@ class DhcpPayload {
     readonly payload: Uint8Array;
 
     // can make public if needed
-    private constructor(op: OP, htype: HTYPE, hops: number, xid: number, secs: number, flags: number,
+    private constructor(op: DhcpOP, htype: HTYPE, hops: number, xid: number, secs: number, flags: number,
         ciaddr: Ipv4Address, yiaddr: Ipv4Address, siaddr: Ipv4Address, giaddr: Ipv4Address,
         chaddr: MacAddress, options: Map<number, [number, Uint8Array]> = new Map(),
         sname: Uint8Array = new Uint8Array(64), file: Uint8Array = new Uint8Array(128)
@@ -611,7 +614,7 @@ class DhcpPayload {
         options.set(DhcpOptions.PARAMETER_REQUEST_LIST, [2, new Uint8Array([DhcpOptions.SUBNET_MASK, DhcpOptions.ROUTER])]);
 
         return new DhcpPayload(
-            OP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
+            DhcpOP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
             empty_ip, empty_ip, empty_ip, empty_ip,
             client_mac,
             options
@@ -626,7 +629,7 @@ class DhcpPayload {
         options.set(DhcpOptions.PARAMETER_REQUEST_LIST, [2, new Uint8Array([DhcpOptions.SUBNET_MASK, DhcpOptions.ROUTER])]);
 
         return new DhcpPayload(
-            OP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
+            DhcpOP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
             empty_ip, empty_ip, server_ipv4, empty_ip,
             client_mac,
             options
@@ -646,7 +649,7 @@ class DhcpPayload {
         }
 
         return new DhcpPayload(
-            OP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
+            DhcpOP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
             empty_ip, your_ipv4, server_ipv4, empty_ip,
             client_mac,
             options
@@ -667,7 +670,7 @@ class DhcpPayload {
         }
 
         return new DhcpPayload(
-            OP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
+            DhcpOP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000,
             empty_ip, your_ipv4, server_ipv4, empty_ip,
             client_mac,
             options

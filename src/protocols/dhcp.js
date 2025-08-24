@@ -5,7 +5,7 @@ import { refreshL3InfLabels } from "../ui/configure.js";
 import { HTYPE } from "./arp.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 import { UdpDatagram } from "./udp.js";
-var DhcpOptions;
+export var DhcpOptions;
 (function (DhcpOptions) {
     DhcpOptions[DhcpOptions["SUBNET_MASK"] = 1] = "SUBNET_MASK";
     DhcpOptions[DhcpOptions["TIME_OFFSET"] = 2] = "TIME_OFFSET";
@@ -18,7 +18,7 @@ var DhcpOptions;
     DhcpOptions[DhcpOptions["PARAMETER_REQUEST_LIST"] = 55] = "PARAMETER_REQUEST_LIST";
 })(DhcpOptions || (DhcpOptions = {}));
 ;
-var DhcpMessageType;
+export var DhcpMessageType;
 (function (DhcpMessageType) {
     DhcpMessageType[DhcpMessageType["DHCPDISCOVER"] = 1] = "DHCPDISCOVER";
     DhcpMessageType[DhcpMessageType["DHCPOFFER"] = 2] = "DHCPOFFER";
@@ -106,7 +106,7 @@ export class DhcpServer {
                     continue;
                 }
                 let message_type_val;
-                if (request.op == OP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE) && (message_type_val = request.options.get(DhcpOptions.MESSAGE_TYPE))) {
+                if (request.op == DhcpOP.BOOTREQUEST && request.options.has(DhcpOptions.MESSAGE_TYPE) && (message_type_val = request.options.get(DhcpOptions.MESSAGE_TYPE))) {
                     const message_type = message_type_val[1][0];
                     if (message_type == DhcpMessageType.DHCPDISCOVER) {
                         setTimeout(() => {
@@ -169,6 +169,9 @@ export class DhcpServer {
             return;
         }
         const [server_ip, prefix, router_address] = record_details;
+        if (dhcp_payload.siaddr.compare(server_ip) !== 0) {
+            return;
+        }
         const chaddr_arr = dhcp_payload.chaddr.slice(0, 6);
         const chaddr = new MacAddress([
             chaddr_arr[0], chaddr_arr[1], chaddr_arr[2],
@@ -353,7 +356,7 @@ export class DhcpClient {
         let xid_record;
         const now = performance.now();
         let message_type_val = response.options.get(DhcpOptions.MESSAGE_TYPE);
-        if (response.op != OP.BOOTREPLY ||
+        if (response.op != DhcpOP.BOOTREPLY ||
             !message_type_val ||
             !(xid_record = this.xids.get(response.xid)) ||
             xid_record[1] <= now ||
@@ -435,13 +438,13 @@ export class DhcpClient {
     }
 }
 DhcpClient.PORT = 68;
-var OP;
-(function (OP) {
-    OP[OP["BOOTREQUEST"] = 1] = "BOOTREQUEST";
-    OP[OP["BOOTREPLY"] = 2] = "BOOTREPLY";
-})(OP || (OP = {}));
+export var DhcpOP;
+(function (DhcpOP) {
+    DhcpOP[DhcpOP["BOOTREQUEST"] = 1] = "BOOTREQUEST";
+    DhcpOP[DhcpOP["BOOTREPLY"] = 2] = "BOOTREPLY";
+})(DhcpOP || (DhcpOP = {}));
 ;
-class DhcpPayload {
+export class DhcpPayload {
     // can make public if needed
     constructor(op, htype, hops, xid, secs, flags, ciaddr, yiaddr, siaddr, giaddr, chaddr, options = new Map(), sname = new Uint8Array(64), file = new Uint8Array(128)) {
         this.hlen = MacAddress.byteLength;
@@ -490,14 +493,14 @@ class DhcpPayload {
         let options = new Map();
         options.set(DhcpOptions.MESSAGE_TYPE, [1, new Uint8Array([DhcpMessageType.DHCPDISCOVER])]);
         options.set(DhcpOptions.PARAMETER_REQUEST_LIST, [2, new Uint8Array([DhcpOptions.SUBNET_MASK, DhcpOptions.ROUTER])]);
-        return new DhcpPayload(OP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, empty_ip, empty_ip, empty_ip, client_mac, options);
+        return new DhcpPayload(DhcpOP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, empty_ip, empty_ip, empty_ip, client_mac, options);
     }
     static dhcpRequest(xid, client_mac, server_ipv4) {
         const empty_ip = new Ipv4Address([0, 0, 0, 0]);
         let options = new Map();
         options.set(DhcpOptions.MESSAGE_TYPE, [1, new Uint8Array([DhcpMessageType.DHCPREQUEST])]);
         options.set(DhcpOptions.PARAMETER_REQUEST_LIST, [2, new Uint8Array([DhcpOptions.SUBNET_MASK, DhcpOptions.ROUTER])]);
-        return new DhcpPayload(OP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, empty_ip, server_ipv4, empty_ip, client_mac, options);
+        return new DhcpPayload(DhcpOP.BOOTREQUEST, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, empty_ip, server_ipv4, empty_ip, client_mac, options);
     }
     static dhcpOffer(xid, client_mac, your_ipv4, server_ipv4, subnet_mask = null, router = null) {
         const empty_ip = new Ipv4Address([0, 0, 0, 0]);
@@ -509,7 +512,7 @@ class DhcpPayload {
         if (router) {
             options.set(DhcpOptions.ROUTER, [4, router.value]);
         }
-        return new DhcpPayload(OP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, your_ipv4, server_ipv4, empty_ip, client_mac, options);
+        return new DhcpPayload(DhcpOP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, your_ipv4, server_ipv4, empty_ip, client_mac, options);
     }
     static dhcpAck(xid, lease_time, client_mac, your_ipv4, server_ipv4, subnet_mask = null, router = null) {
         const empty_ip = new Ipv4Address([0, 0, 0, 0]);
@@ -522,7 +525,7 @@ class DhcpPayload {
         if (router) {
             options.set(DhcpOptions.ROUTER, [4, router.value]);
         }
-        return new DhcpPayload(OP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, your_ipv4, server_ipv4, empty_ip, client_mac, options);
+        return new DhcpPayload(DhcpOP.BOOTREPLY, HTYPE.ETHERNET, 0x00, xid, 0x0000, 0x0000, empty_ip, your_ipv4, server_ipv4, empty_ip, client_mac, options);
     }
     static parse(payload) {
         const divided = divide(payload.slice(0, DhcpPayload._bytes_before_sname), DhcpPayload._lengths);
