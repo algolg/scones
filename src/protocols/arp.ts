@@ -5,14 +5,14 @@ import { Packet } from "../packet.js";
 
 export enum HTYPE { ETHERNET = 1 }
 // enum PTYPE { IPv4 = 0x0800 }
-export enum OP { REQUEST = 1, REPLY };
+export enum ArpOP { REQUEST = 1, REPLY };
 
 export class ArpPacket implements Packet {
     private readonly _htype: HTYPE;
     private readonly _ptype: EtherType;
     private readonly _hlen = MacAddress.byteLength;
     private readonly _plen = Ipv4Address.byteLength;
-    private readonly _op: OP;
+    private readonly _op: ArpOP;
     private readonly _src_ha: MacAddress;
     private readonly _src_pa: Ipv4Address;
     private readonly _dest_ha: MacAddress;
@@ -20,7 +20,7 @@ export class ArpPacket implements Packet {
     private readonly _packet: Uint8Array;
     private static readonly _lengths: number[] = [16, 16, 8, 8, 16, 48, 32, 48, 32];
 
-    public constructor(op: OP, src_ha: MacAddress, src_pa: Ipv4Address, dest_ha: MacAddress = MacAddress.broadcast, dest_pa: Ipv4Address) {
+    public constructor(op: ArpOP, src_ha: MacAddress, src_pa: Ipv4Address, dest_ha: MacAddress = MacAddress.broadcast, dest_pa: Ipv4Address) {
         this._htype = HTYPE.ETHERNET;
         this._ptype = EtherType.IPv4;
         this._op = op;
@@ -42,7 +42,7 @@ export class ArpPacket implements Packet {
         return this.ptype;
     }
 
-    public get op(): OP {
+    public get op(): ArpOP {
         return this._op;
     }
 
@@ -90,7 +90,7 @@ export class ArpPacket implements Packet {
      * @returns the reply ARP packet
      */
     public makeReply(new_src_ha: MacAddress): ArpPacket {
-        return new ArpPacket(OP.REPLY, new_src_ha, this.dest_pa, this.src_ha, this.src_pa);
+        return new ArpPacket(ArpOP.REPLY, new_src_ha, this.dest_pa, this.src_ha, this.src_pa);
     }
 }
 
@@ -117,13 +117,13 @@ export class ArpTable {
     /**
      * Returns an ARP table entry for a given IP address
      * @param ip the IP address to get the ARP entry of
-     * @returns (remote MAC, local MAC) pair, if one exists. undefined otherwise
+     * @returns (remote MAC, local MAC) pair, if one exists. null otherwise
      */
-    public get(ip: Ipv4Address): [MacAddress, MacAddress] {
+    public get(ip: Ipv4Address): [MacAddress, MacAddress] | null {
         if (this._local_infs.some((inf) => inf !== undefined && inf.compare(ip) == 0)) {
             return [MacAddress.loopback, MacAddress.loopback];
         }
-        return this._table.get(this.keyToString(ip.ethertype, ip));
+        return this._table.get(this.keyToString(ip.ethertype, ip)) ?? null;
     }
     public has(ip: Ipv4Address): boolean {
         return this._table.has(this.keyToString(ip.ethertype, ip));

@@ -9,7 +9,9 @@ export const topology = document.getElementById('topology');
 canvas.width = topology.clientWidth;
 canvas.height = topology.clientHeight;
 export const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = true;
+if (ctx) {
+    ctx.imageSmoothingEnabled = true;
+}
 export const pc_img = new Image();
 export const server_img = new Image();
 export const router_img = new Image();
@@ -41,9 +43,12 @@ export function setDPI(canvas, dpi) {
     var oldScale = canvas.width / width;
     var backupScale = scaleFactor / oldScale;
     var backup = canvas.cloneNode(false);
-    backup.getContext('2d').drawImage(canvas, 0, 0);
+    backup.getContext('2d')?.drawImage(canvas, 0, 0);
     // Resize the canvas.
     var ctx = canvas.getContext('2d');
+    if (!ctx) {
+        return;
+    }
     canvas.width = Math.ceil(width * scaleFactor);
     canvas.height = Math.ceil(height * scaleFactor);
     // Redraw the canvas image and scale future draws.
@@ -52,6 +57,9 @@ export function setDPI(canvas, dpi) {
     ctx.setTransform(scaleFactor, 0, 0, scaleFactor, 0, 0);
 }
 export function initCanvas() {
+    if (!ctx) {
+        return;
+    }
     const height = canvas.height;
     const width = canvas.width;
     ctx.clearRect(0, 0, width, height);
@@ -92,8 +100,11 @@ export function initCanvas() {
     }
 }
 export function redrawCanvas(display = true) {
+    if (!ctx) {
+        return;
+    }
     initCanvas();
-    if (focusedDevice !== undefined) {
+    if (focusedDevice) {
         if (display) {
             displayInfo(focusedDevice);
         }
@@ -110,6 +121,9 @@ export function redrawCanvas(display = true) {
     }
 }
 export function drawFrame(...frame_info_set) {
+    if (!ctx) {
+        return;
+    }
     redrawCanvas(false);
     for (let frame_info of frame_info_set) {
         const x = frame_info[0] * canvas.width;

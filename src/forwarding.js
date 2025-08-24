@@ -11,7 +11,7 @@ export class ForwardingInformationBase {
         return this._table.delete(destination.toString());
     }
     get(destination) {
-        return this._table.get(destination.toString());
+        return this._table.get(destination.toString()) ?? null;
     }
     has(destination) {
         console.log(`** ${destination} is in my forwarding table`);

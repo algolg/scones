@@ -1,17 +1,16 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "../addressing.js";
-import { Device, DeviceType, PersonalComputer, Router } from "../device.js";
+import { Device } from "../device.js";
 import { DisplayFrame } from "../frame.js";
 import { IcmpControlMessage, IcmpDatagram, IcmpUnreachableCode } from "../protocols/icmp.js";
 import { InfLayer, InfMatrix } from "../interface.js";
 import { Ipv4Packet } from "../protocols/ip.js";
-import { Protocol } from "../socket.js";
 import { getExplanation } from "./explain.js";
 import { focusedDevice } from "./topology.js";
-import { RECORDED_FRAMES } from "./variables.js";
+import { Protocol, RECORDED_FRAMES } from "./variables.js";
 
 export const configurePanel = document.getElementById('configure-panel');
 
-const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_active: boolean, ipv4_address?: Ipv4Address, ipv4_prefix?: Ipv4Prefix) => 
+const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_active: boolean, ipv4_address?: Ipv4Address, ipv4_prefix?: Ipv4Prefix, dhcp_enabled?: boolean) => 
 `
 <div class="config-option">
     <input id="eth${id_num}-dropdown" class="option-dropdown" type="checkbox">
@@ -29,7 +28,10 @@ const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_ac
                 <label for="ipv4-address">IPv4 Address</label>
                 <input name="ipv4-address" onchange="updateIpv4Address(this)" class="mono" type="text" placeholder="A.B.C.D" value="${ipv4_address ?? ''}" num="${id_num}"/>
                 <label for="ipv4-prefix">IPv4 Prefix</label>
-                <input name="ipv4-prefix" onchange="updateIpv4Prefix(this)" class="mono" type="number" min="0" max="30" value="${ipv4_prefix.value ?? undefined}" num="${id_num}"/>
+                <input name="ipv4-prefix" onchange="updateIpv4Prefix(this)" class="mono" type="number" min="0" max="30" value="${ipv4_prefix ?? undefined}" num="${id_num}"/>
+                <label for="toggle-dhcp" class="toggle-dhcp-prelabel gap-above">DHCP Client</label>
+                <input name="toggle-dhcp" onclick="toggleDhcpClient(this,'${mac}')" class="toggle-dhcp" type="checkbox" ${dhcp_enabled ? "checked" : ""}/>
+                <label for="toggle-dhcp"class="toggle-dhcp-postlabel"></label>
             </form>
         </div>`
         :
@@ -40,9 +42,13 @@ const interfaceConfig = (id_num: number, mac: MacAddress, layer: InfLayer, is_ac
 `
 
 const routeConfig = (routes: [string, Ipv4Address, Ipv4Address, number][]) => {
+    if (!focusedDevice) {
+        return;
+    }
+
     let table_rows = "";
     routes.forEach((route) => {
-        let num = focusedDevice.l3infs.find((inf) => inf.ipv4.compare(route[2]) == 0).num;
+        let num = focusedDevice!.l3infs.find((inf) => inf.ipv4.compare(route[2]) == 0)?.num ?? -1;
         table_rows += `
         <tr>
             <td>${route[0]}</td>
@@ -122,48 +128,63 @@ const pingTool = (device: Device) => {
     `
 }
 
-// TODO: implement this as a feature on interface
-const dhcpClientTool = () => {
+const dhcpServerTool = (records: [Readonly<Ipv4Address>, Readonly<Ipv4Prefix>, Readonly<Ipv4Address>][]) => {
+    let table_rows = "";
+    records.forEach((record) => {
+        table_rows += `
+        <tr>
+            <td>${record[0]}/${record[1]}</td>
+            <td>${record[2]}</td>
+            <td>
+                <button onclick="deleteDhcpRecord(this)" netadd="${record[0]}">
+                    <img src="assets/icons/delete.svg"/>
+                </button>
+            </td>
+        </tr>`
+    });
     return `
+    <h3>DHCP Server</h3>
     <div class="config-option">
-        <input id="dhcp-dropdown" class="option-dropdown" type="checkbox">
-        <label for="dhcp-dropdown" class="option-dropdown-label">DHCP Client</label>
-        <div class="option-dropdown-contents">
-            <button type="toggle" onclick="toggleDhcpClient()">Toggle DHCP Client</button>
-        </div>
+        <table class="config-table">
+            <tr>
+                <th>Pool Network</th>
+                <th>Router Address</th>
+                <th style="width:8%"></th>
+            </tr>
+            ${table_rows}
+        </table>
     </div>
-    `
-}
-
-const dhcpServerTool = (network_address: Ipv4Address, prefix: Ipv4Prefix, router: Ipv4Address) => {
-    return `
     <div class="config-option">
-        <input id="dhcp-server-dropdown" class="option-dropdown" type="checkbox">
-        <label for="dhcp-server-dropdown" class="option-dropdown-label">DHCP Server</label>
-    <div class="option-dropdown-contents">
-            <form class="option-form dhcp-server-change">
-                <label for="dhcp-network">DHCP Network Address</label>
-                <input name="dhcp-network" onchange="dhcpServerUpdateNetwork(this)" class="mono" type="text" placeholder="A.B.C.D" value="${network_address ?? ''}" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
-                <label for="dhcp-prefix">DHCP Network Prefix</label>
-                <input name="dhcp-prefix" onchange="dhcpServerUpdatePrefix(this)" class="mono" type="number" min="0" max="30" value="${prefix?.value ?? undefined}"/>
-                <label for="dhcp-router">DHCP Router</label>
-                <input name="dhcp-network" onchange="dhcpServerUpdateRouter(this)" class="mono" type="text" placeholder="A.B.C.D" value="${router ?? ''}" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
+        <input id="add-dhcp-record-dropdown" class="option-dropdown" type="checkbox">
+        <label for="add-dhcp-record-dropdown" class="option-dropdown-label">Add a DHCP Record</label>
+        <div class="option-dropdown-contents">
+            <form id="add-dhcp-record-form" class="option-form" onsubmit="addDhcpRecord()">
+                <label for="dhcp-pool-network">DHCP Pool Network Address</label>
+                <input name="dhcp-pool-network" class="mono" type="text" placeholder="A.B.C.D" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
+                <label for="dhcp-pool-prefix">DHCP Pool Prefix</label>
+                <input name="dhcp-pool-prefix" class="mono" type="number" min="0" max="30" required/>
+                <label for="dhcp-router-ipv4-address">Router IPv4 Address</label>
+                <input name="dhcp-router-ipv4-address" class="mono" type="text" placeholder="A.B.C.D" required pattern="(([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.([01]?[0-9][0-9]?|2[0-4][0-9]|25[0-5]))"/>
+                <button type="submit">Add</button>
             </form>
         </div>
     </div>
     `
 }
 
-const frameListing = (display_frame_set: DisplayFrame[], idx: number, frame_coords: [number, number][], frame_angle: number[], protocol: Protocol, explanation: string) => {
+const frameListing = (display_frame_set: DisplayFrame[], idx: number, frame_coords: [number, number][], frame_angle: number[], protocols: Protocol[], explanation: string) => {
     let onchangeParam = [];
     for (let i=0; i<frame_coords.length; i++) {
         onchangeParam.push(`[${frame_coords[i][0]}, ${frame_coords[i][1]}, ${frame_angle[i]}]`);
     }
+
+    const protocols_class_prefixes = protocols.map((p) => Protocol[p].toLowerCase());
+    // const protocol_str = protocols.map((p) => Protocol[p]).reverse().join(' [') + ']'.repeat(protocols.length - 1);
     return `
-    <div class="config-option frame-listing ${Protocol[protocol].toLowerCase()}-frame">
+    <div class="config-option frame-listing ${protocols_class_prefixes.map((p) => `${p}-frame`).join(' ')}">
         <input id="frame${idx}-dropdown" onchange="drawFrame(${onchangeParam.join(',')})" class="option-dropdown" name="frame-selector" type="radio">
         <label for="frame${idx}-dropdown" class="option-dropdown-label frame-label">
-            <div class="ethertype ${Protocol[protocol].toLowerCase()}-label">${Protocol[protocol]}</div>
+            <div class="ethertype ${protocols_class_prefixes.map((p) => `${p}-label`).join(' ')}">${Protocol[protocols[protocols.length-1]]}</div>
             <div class="info-1">${display_frame_set[0].frame.src_mac} to ${display_frame_set[0].frame.dest_mac}</div>
         </label>
         <div class="option-dropdown-contents">
@@ -174,15 +195,21 @@ const frameListing = (display_frame_set: DisplayFrame[], idx: number, frame_coor
 }
 
 function clearConfigurePanel() {
-    configurePanel.innerHTML = '';
+    if (configurePanel) {
+        configurePanel.innerHTML = '';
+    }
 }
 export function resetConfigurePanel() {
-    configurePanel.innerHTML = '<div class="default-notice">Select a device</div>';
+    if (configurePanel) {
+        configurePanel.innerHTML = '<div class="default-notice">Select a device</div>';
+    }
 }
 
 export function displayInfo(device: Device) {
-    // configurePanel.setAttribute("current", device.getId().value.toString());
     clearConfigurePanel();
+    if (!configurePanel) {
+        throw Error("No configure panel found")
+    }
     
     let prevent_default_form_ids: string[] = [];
 
@@ -191,32 +218,37 @@ export function displayInfo(device: Device) {
         configurePanel.innerHTML += interfaceConfig(idx, l2inf.mac, InfLayer.L2, l2inf.isActive());
     }
     for (let [idx, l3inf] of device.l3infs.entries()) {
-        configurePanel.innerHTML += interfaceConfig(idx, l3inf.mac, InfLayer.L3, l3inf.isActive(), l3inf.ipv4, l3inf.ipv4_prefix);
+        configurePanel.innerHTML += interfaceConfig(idx, l3inf.mac, InfLayer.L3, l3inf.isActive(), l3inf.ipv4, l3inf.ipv4_prefix, device.dhcpEnabled(l3inf.mac));
     }
     if (device.l3infs.length > 0) {
-        // add routing section and ping section
+        // add routing section
         configurePanel.innerHTML += routeConfig(device.getAllRoutes());
         prevent_default_form_ids.push('add-route-form');
 
+        // add server section
+        if (device.hasDhcpServer()) {
+            configurePanel.innerHTML += `<h2>Servers</h2>`;
+            configurePanel.innerHTML += dhcpServerTool(device.dhcp_records!);
+            prevent_default_form_ids.push('add-dhcp-record-form');
+        }
+
+        // add ping section
         configurePanel.innerHTML += `<h2>Tools</h2>`;
         configurePanel.innerHTML += pingTool(device);
         prevent_default_form_ids.push('execute-ping-form');
-
-        if (device.device_type == DeviceType.PC) {
-            configurePanel.innerHTML += dhcpClientTool();
-        }
-        else if (isRouter(device)) {
-            configurePanel.innerHTML += dhcpServerTool(device._dhcp_server.network, device._dhcp_server.prefix, device._dhcp_server.router);
-        }
     }
 
     for (const form_id of prevent_default_form_ids) {
-        document.getElementById(form_id).addEventListener("submit", x => x.preventDefault());
+        document.getElementById(form_id)?.addEventListener("submit", x => x.preventDefault());
     }
 }
 
 export function displayFrames() {
     clearConfigurePanel();
+    if (!configurePanel) {
+        throw Error("No configure panel found")
+    }
+
     configurePanel.innerHTML += `<h2>Captured Frames</h2>`;
     configurePanel.innerHTML +=
     `
@@ -257,11 +289,10 @@ export function displayFrames() {
             }
             else {
                 const src_coords = frame.sender_coords();
-                console.log(`${frame.egress_mac}`);
                 const dest_inf = InfMatrix.getNeighborInf(frame.egress_mac);
-                console.log(`${dest_inf}`);
-                if (src_coords === undefined || dest_inf === undefined) {
-                    throw "invalid frame";
+                if (!dest_inf) {
+                    console.error("invalid frame");
+                    continue;
                 }
                 frame_coords = [
                     (src_coords[0] + dest_inf.coords[0]) / 2,
@@ -278,13 +309,19 @@ export function displayFrames() {
     }
 }
 
-function refreshL3InfLabels() {
-    const labels = document.getElementsByClassName('interface-label');
-    if (labels.length != focusedDevice.l3infs.length) {
+export function refreshL3InfLabels() {
+    if (!focusedDevice) {
         return;
     }
+
+    const labels = document.getElementsByClassName('interface-label');
+    const dhcp_toggles = <HTMLCollectionOf<HTMLInputElement>> document.getElementsByClassName('toggle-dhcp');
+    if (labels.length !== focusedDevice.l3infs.length || dhcp_toggles.length !== focusedDevice.l3infs.length) {
+        return;
+    }
+
     Array.from(labels).forEach((label,idx) => {
-        const current_inf = focusedDevice.l3infs[idx];
+        const current_inf = focusedDevice!.l3infs[idx];
         label.innerHTML = `
             <div class="name">eth${idx}</div>
             <div class="info-1">${current_inf.isActive() ? "Active" : "Inactive"}</div>
@@ -292,11 +329,24 @@ function refreshL3InfLabels() {
             <div class="info-3">${current_inf.layer == InfLayer.L3 ? current_inf.ipv4 : ''}</div>
         `
     });
+
+    Array.from(dhcp_toggles).forEach((toggle,idx) => {
+        const current_mac = focusedDevice!.l3infs[idx].mac;
+        const dhcp_enabled = focusedDevice?.dhcpEnabled(current_mac);
+
+        if (dhcp_enabled !== undefined) {
+            toggle.checked = dhcp_enabled;
+        }
+    });
 }
 
 function updateIpv4Address(ele: HTMLInputElement) {
+    if (!focusedDevice) {
+        return;
+    }
+
     const num_str = ele.getAttribute('num');
-    if (num_str === undefined) {
+    if (!num_str) {
         return;
     }
     const num = parseInt(num_str);
@@ -304,7 +354,7 @@ function updateIpv4Address(ele: HTMLInputElement) {
         return;
     }
     const ipv4 = Ipv4Address.parseString(ele.value);
-    if (ipv4 === undefined) {
+    if (!ipv4) {
         return;
     }
     const ipv4_val = ipv4.value;
@@ -314,8 +364,12 @@ function updateIpv4Address(ele: HTMLInputElement) {
 } (<any>window).updateIpv4Address = updateIpv4Address;
 
 function updateIpv4Prefix(ele: HTMLInputElement) {
+    if (!focusedDevice) {
+        return;
+    }
+
     const num_str = ele.getAttribute('num');
-    if (num_str === undefined) {
+    if (!num_str) {
         return;
     }
     const num = parseInt(num_str);
@@ -331,46 +385,55 @@ function updateIpv4Prefix(ele: HTMLInputElement) {
     refreshL3InfLabels();
 } (<any>window).updateIpv4Prefix = updateIpv4Prefix;
 
-function addRoute() {
-    const form_ele = <HTMLFormElement>document.getElementById('add-route-form');
-    if (form_ele === undefined) {
-        return;
+export function parseIpv4Address(ipv4_string: string): Ipv4Address {
+    const ipv4_address = Ipv4Address.parseString(ipv4_string);
+    if (!ipv4_address) {
+        throw Error(`Invalid Form Input: ${ipv4_string}`);
     }
+
+    return ipv4_address;
+}
+
+function parseFormIpv4Address(form_ele: HTMLFormElement, field_name: string): Ipv4Address {
     const form = new FormData(form_ele);
+    const form_ipv4_address = form.get(field_name) as string;
+    return parseIpv4Address(form_ipv4_address);
+}
 
-    const form_dest_ipv4_address = form.get('dest-ipv4-address') as string;
-    const form_dest_ipv4_prefix = form.get('dest-ipv4-prefix') as string;
-    const form_next_hop_ipv4_address = form.get('next-hop-ipv4-address') as string;
-    const form_exit_interface = form.get('exit-interface') as string;
-    const form_administrative_distance = form.get('administrative-distance') as string;
-    if (form_dest_ipv4_address === undefined || form_dest_ipv4_prefix === undefined || form_next_hop_ipv4_address === undefined || form_exit_interface === undefined || form_administrative_distance === undefined) {
-        console.error("Invalid Form Inputs");
-        return;
-    }
-
-    const dest_ipv4_address = Ipv4Address.parseString(form_dest_ipv4_address);
-    const dest_ipv4_prefix = parseInt(form_dest_ipv4_prefix);
-    const next_hop_ipv4_address = Ipv4Address.parseString(form_next_hop_ipv4_address);
-    const exit_interface_num = parseInt(form_exit_interface);
-    const administrative_distance = parseInt(form_administrative_distance)
-
-    if (dest_ipv4_address === undefined || next_hop_ipv4_address === undefined || isNaN(dest_ipv4_prefix) || isNaN(exit_interface_num) || isNaN(administrative_distance)) {
-        console.error("Invalid Form Inputs");
-        return;
+export function parseNumber(num_str: string, min: number = Number.MIN_VALUE, max: number = Number.MAX_VALUE): number {
+    const num = parseInt(num_str);
+    if (isNaN(num)) {
+        throw Error(`Invalid Input: ${num_str}`);
     }
 
-    if (dest_ipv4_prefix < 0 || dest_ipv4_prefix > 30) {
-        console.error("Invalid Destination IPv4 Prefix");
+    if (num < min || num > max) {
+        throw Error(`Invalid Input: ${num_str} is out of range`);
+    }
+
+    return num;
+}
+
+function parseFormNumber(form_ele: HTMLFormElement, field_name: string, min: number = Number.MIN_VALUE, max: number = Number.MAX_VALUE): number {
+    const form = new FormData(form_ele);
+    const form_number = form.get(field_name) as string;
+    return parseNumber(form_number, min, max);
+}
+
+function addRoute() {
+    if (!focusedDevice) {
         return;
     }
-    if (exit_interface_num < 0 || exit_interface_num >= focusedDevice.l3infs.length) {
-        console.error("Invalid Exit Interface");
+
+    const form_ele = <HTMLFormElement>document.getElementById('add-route-form');
+    if (!form_ele) {
         return;
     }
-    if (administrative_distance < 1) {
-        console.error("Invalid Administrative Distance");
-        return;
-    }
+
+    const dest_ipv4_address = parseFormIpv4Address(form_ele, 'dest-ipv4-address');
+    const dest_ipv4_prefix = parseFormNumber(form_ele, 'dest-ipv4-prefix', 0, 30);
+    const next_hop_ipv4_address = parseFormIpv4Address(form_ele, 'next-hop-ipv4-address');
+    const exit_interface_num = parseFormNumber(form_ele, 'exit-interface', 0, focusedDevice.l3infs.length);
+    const administrative_distance = parseFormNumber(form_ele, 'administrative-distance', 1);
 
     const local_inf = focusedDevice.l3infs[exit_interface_num].ipv4;
 
@@ -379,12 +442,17 @@ function addRoute() {
 } (<any>window).addRoute = addRoute;
 
 function deleteRoute(ele: HTMLButtonElement) {
+    if (!focusedDevice) {
+        console.error("Could not delete route");
+        return;
+    }
+
     const dest = ele.getAttribute('dest');
     const nexthop = ele.getAttribute('nexthop');
     const exitinf = ele.getAttribute('exitinf');
     const ad = ele.getAttribute('ad');
 
-    if (dest === undefined || nexthop === undefined || exitinf === undefined || ad === undefined) {
+    if (!dest || !nexthop || !exitinf || !ad) {
         console.error("Could not delete route");
         return;
     }
@@ -396,20 +464,11 @@ function deleteRoute(ele: HTMLButtonElement) {
         return;
     }
 
-    const dest_ipv4_address = Ipv4Address.parseString(dest_split[0]);
-    const dest_ipv4_prefix = parseInt(dest_split[1]);
-    const next_hop_ipv4_address = Ipv4Address.parseString(nexthop);
-    const exit_interface_num = parseInt(exitinf)
-    const administrative_distance = parseInt(ad);
-
-    if (dest_ipv4_address === undefined || isNaN(dest_ipv4_prefix) || next_hop_ipv4_address === undefined || isNaN(exit_interface_num) || isNaN(administrative_distance)) {
-        console.error("Could not delete route");
-        return;
-    }
-    if (exit_interface_num < 0 || exit_interface_num >= focusedDevice.l3infs.length) {
-        console.error("Could not delete route");
-        return;
-    }
+    const dest_ipv4_address = parseIpv4Address(dest_split[0]);
+    const dest_ipv4_prefix = parseNumber(dest_split[1], 0, 32);
+    const next_hop_ipv4_address = parseIpv4Address(nexthop);
+    const exit_interface_num = parseNumber(exitinf, 0, focusedDevice.l3infs.length);
+    const administrative_distance = parseNumber(ad, 1);
 
     const local_inf = focusedDevice.l3infs[exit_interface_num].ipv4;
 
@@ -418,29 +477,18 @@ function deleteRoute(ele: HTMLButtonElement) {
 } (<any>window).deleteRoute = deleteRoute;
 
 function executePing(ele: HTMLButtonElement) {
+    if (!focusedDevice) {
+        return;
+    }
+
     const form_ele = <HTMLFormElement>document.getElementById('execute-ping-form') ;
-    if (form_ele === undefined) {
-        return;
-    }
-    const form = new FormData(form_ele);
-
-    const form_dest_ipv4_address = form.get('dest-ipv4-address') as string;
-    const form_ttl = form.get('ttl') as string;
-    const form_count = form.get('count') as string;
-    
-    if (form_dest_ipv4_address === undefined || form_ttl === undefined || form_count === undefined) {
-        console.error('Could not send ping');
+    if (!form_ele) {
         return;
     }
 
-    const dest_ipv4_address = Ipv4Address.parseString(form_dest_ipv4_address);
-    const ttl = parseInt(form_ttl);
-    const count = parseInt(form_count);
-
-    if (dest_ipv4_address === undefined || isNaN(ttl) || isNaN(count)) {
-        console.error('Could not send ping');
-        return;
-    }
+    const dest_ipv4_address: Ipv4Address = parseFormIpv4Address(form_ele, 'dest-ipv4-address');
+    const ttl: number = parseFormNumber(form_ele, 'ttl', 0, 255);
+    const count: number = parseFormNumber(form_ele, 'count');
 
     const device = focusedDevice;
     device.clearPingTerminal();
@@ -495,86 +543,54 @@ function refreshPingTerminal(device: Device) {
     }
 }
 
-function ipv4AddressFromInputEle(ele: HTMLInputElement): Ipv4Address {
-    const num_str = ele.getAttribute('num');
-    if (num_str === undefined) {
-        return undefined;
+function toggleDhcpClient(ele: HTMLInputElement, mac_string: string) {
+    if (!focusedDevice) {
+        return;
     }
-    const num = parseInt(num_str);
-    if (num < 0 || num >= focusedDevice.l3infs.length) {
-        return undefined;
-    }
-    const ipv4 = Ipv4Address.parseString(ele.value);
-    if (ipv4 === undefined) {
-        return undefined;
-    }
-    return ipv4;
 
-}
-
-function ipv4PrefixFromInputEle(ele: HTMLInputElement): Ipv4Prefix {
-    const num_str = ele.getAttribute('num');
-    if (num_str === undefined) {
-        return undefined;
+    const mac = MacAddress.parseString(mac_string);
+    if (!mac) {
+        return;
     }
-    const num = parseInt(num_str);
-    if (num < 0 || num >= focusedDevice.l3infs.length) {
-        return undefined;
-    }
-    const prefix = ele.valueAsNumber;
-    if (prefix === undefined || prefix < 0 || prefix > 32) {
-        return undefined;
-    }
-    return new Ipv4Prefix(prefix);
-}
-
-function isPC(dev: Device): dev is PersonalComputer {
-    return (dev as PersonalComputer).toggleDhcpClient() !== undefined;
-}
-
-function isRouter(dev: Device): dev is Router {
-    return (dev as Router)._dhcp_server !== undefined;
-}
-
-function toggleDhcpClient() {
+    
     const device = focusedDevice;
-    if (isPC(device)) {
-        device.toggleDhcpClient();
-    }
+
+    const initial = focusedDevice.dhcpEnabled(mac);
+    const result = device.toggleDhcpClient(mac);
+    // XOR the checkbox value and the result value to get the new checkbox value
+    ele.checked = initial != result;
 } (<any>window).toggleDhcpClient = toggleDhcpClient;
 
-function dhcpServerUpdateNetwork(ele: HTMLInputElement) {
-    const network = ipv4AddressFromInputEle(ele);
-    if (!network) {
+function addDhcpRecord() {
+    if (!focusedDevice) {
         return;
     }
 
-    const device = focusedDevice;
-    if (isRouter(device)) {
-        device._dhcp_server.network = network;
-    }
-} (<any>window).dhcpServerUpdateNetwork = dhcpServerUpdateNetwork;
+    const form_ele = <HTMLFormElement>document.getElementById('add-dhcp-record-form');
 
-function dhcpServerUpdatePrefix(ele: HTMLInputElement) {
-    const prefix = ipv4PrefixFromInputEle(ele);
-    if (!prefix) {
+    const pool_network_address = parseFormIpv4Address(form_ele, 'dhcp-pool-network');
+    const pool_prefix = parseFormNumber(form_ele, 'dhcp-pool-prefix', 0, 30);
+    const router_address = parseFormIpv4Address(form_ele, 'dhcp-router-ipv4-address');
+    
+    focusedDevice.addDhcpRecord(pool_network_address, new Ipv4Prefix(pool_prefix), router_address);
+
+    displayInfo(focusedDevice);
+} (<any>window).addDhcpRecord = addDhcpRecord;
+
+function deleteDhcpRecord(ele: HTMLElement) {
+    if (!focusedDevice) {
         return;
     }
 
-    const device = focusedDevice;
-    if (isRouter(device)) {
-        device._dhcp_server.prefix = prefix;
+    if (!ele.hasAttribute('netadd')) {
+        throw Error("Cannot delete DHCP record");
     }
-} (<any>window).dhcpServerUpdatePrefix = dhcpServerUpdatePrefix;
+    const netadd = ele.getAttribute('netadd');
+    if (!netadd) {
+        throw Error("Cannot delete DHCP record");
+    }
+    const pool_network_address = parseIpv4Address(netadd);
+    focusedDevice.deleteDhcpRecord(pool_network_address);
 
-function dhcpServerUpdateRouter(ele: HTMLInputElement) {
-    const router = ipv4AddressFromInputEle(ele);
-    if (!router) {
-        return;
-    }
-
-    const device = focusedDevice;
-    if (isRouter(device)) {
-        device._dhcp_server.router = router;
-    }
-} (<any>window).dhcpServerUpdateRouter = dhcpServerUpdateRouter;
+    displayInfo(focusedDevice);
+} (<any>window).deleteDhcpRecord = deleteDhcpRecord;

@@ -3,7 +3,10 @@
         "target": "ES2021",
         "sourceMap": true,
         // "module": "CommonJS",
+        "strict": true,
         "strictFunctionTypes": true,
-        "noImplicitReturns": true
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true
     }
 }

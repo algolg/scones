@@ -11,7 +11,9 @@ canvas.width = topology.clientWidth;
 canvas.height = topology.clientHeight;
 export const ctx = canvas.getContext("2d");
 
-ctx.imageSmoothingEnabled = true;
+if (ctx) {
+    ctx.imageSmoothingEnabled = true;
+}
 
 export const pc_img = new Image();
 export const server_img = new Image();
@@ -35,7 +37,7 @@ packet_img.width = packet_img.height =
 packet_flipped_img.width = packet_flipped_img.height = ICON_SIZE/2;
 
 // https://stackoverflow.com/questions/14488849/higher-dpi-graphics-with-html5-canvas
-export function setDPI(canvas, dpi) {
+export function setDPI(canvas: HTMLCanvasElement, dpi: number) {
     // Set up CSS size.
     canvas.style.width = canvas.width + 'px';
     canvas.style.height = canvas.height + 'px';
@@ -48,11 +50,15 @@ export function setDPI(canvas, dpi) {
     // Backup the canvas contents.
     var oldScale = canvas.width / width;
     var backupScale = scaleFactor / oldScale;
-    var backup = canvas.cloneNode(false);
-    backup.getContext('2d').drawImage(canvas, 0, 0);
+    var backup = <HTMLCanvasElement>canvas.cloneNode(false);
+    backup.getContext('2d')?.drawImage(canvas, 0, 0);
 
     // Resize the canvas.
     var ctx = canvas.getContext('2d');
+    if (!ctx) {
+        return;
+    }
+
     canvas.width = Math.ceil(width * scaleFactor);
     canvas.height = Math.ceil(height * scaleFactor);
 
@@ -63,6 +69,10 @@ export function setDPI(canvas, dpi) {
 }
 
 export function initCanvas() {
+    if (!ctx) {
+        return;
+    }
+
     const height = canvas.height;
     const width = canvas.width;
 
@@ -107,9 +117,13 @@ export function initCanvas() {
 }
 
 export function redrawCanvas(display: boolean = true) {
+    if (!ctx) {
+        return;
+    }
+
     initCanvas();
 
-    if (focusedDevice !== undefined) {
+    if (focusedDevice) {
         if (display) {
             displayInfo(focusedDevice);
         }
@@ -131,12 +145,16 @@ export function redrawCanvas(display: boolean = true) {
     }
 }
 
-export function drawFrame(...frame_info_set: [number, number, number]) {
+export function drawFrame(...frame_info_set: [number, number, number][]) {
+    if (!ctx) {
+        return;
+    }
+
     redrawCanvas(false);
     for (let frame_info of frame_info_set) {
-        const x = frame_info[0] * canvas.width;
-        const y = frame_info[1] * canvas.height;
-        let frame_angle = frame_info[2];
+        const x: number = frame_info[0] * canvas.width;
+        const y: number = frame_info[1] * canvas.height;
+        let frame_angle: number = frame_info[2];
         let img = packet_img;
         if (frame_angle > Math.PI/2 || frame_angle < -Math.PI/2) {
             frame_angle += Math.PI;

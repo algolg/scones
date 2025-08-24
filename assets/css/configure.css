@@ -38,6 +38,7 @@
     background-color: var(--bg);
     margin: calc(var(--border-size) * 2);
     padding: 8px;
+    overflow: hidden;
 }
 .option-dropdown {
     display: none;
@@ -60,11 +61,11 @@
     border-radius: 3px;
     background-color: var(--bg-dark);
     visibility: hidden;
-    opacity: 0;
+    /* opacity: 0; */
     padding: 0 8px;
     margin: 0 8px;
     max-height: 0;
-    transition: max-height 0.2s, padding 0.2s, margin 0.2s, visibility 0.2s, opacity 0.2s;
+    transition: max-height 0.3s, padding 0.3s, margin 0.3s, visibility 0.3s, opacity 0.2s;
 }
 .option-dropdown:checked ~ .option-dropdown-contents {
     visibility: visible;
@@ -77,9 +78,10 @@
     content: '\25B6';
     position: absolute;
     margin-left: -1.2rem;
+    transition: transform 0.2s;
 }
 .option-dropdown:checked ~ .option-dropdown-label::before {
-    content: '\25BC';
+    transform: rotate(90deg);
 }
 .info-3 {
     width: 28%;
@@ -104,6 +106,19 @@
 }
 .option-form > button[type=submit] {
     margin-top: 8px;
+}
+
+.toggle-dhcp-prelabel {
+    display: block;
+}
+input[name=toggle-dhcp] {
+    display: inline-block;
+}
+input[name=toggle-dhcp] ~ .toggle-dhcp-postlabel::before {
+    content: 'Inactive'
+}
+input[name=toggle-dhcp]:checked ~ .toggle-dhcp-postlabel::before {
+    content: 'Started'
 }
 
 .config-table {
@@ -179,6 +194,13 @@
 }
 .udp-label {
     color: #b32828;
+}
+
+.dhcp-label.udp-label::after {
+    content: '[UDP]';
+    font-size: 0.8em;
+    margin-left: 0.5em;
+    filter: grayscale(0.4) saturate(0.4) brightness(1.4);
 }
 
 #frame-selectors {

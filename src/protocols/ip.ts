@@ -71,10 +71,12 @@ export class Ipv4Packet implements Packet {
     }
 
     public static calculateChecksum(header_without_checksum: Uint8Array): number {
-        let words = divide(header_without_checksum, Array<number>(header_without_checksum.length / 2).fill(16));
         let sum = 0;
-        for (let word of words) {
-            sum += word;
+        for (let i=0; i < header_without_checksum.length; i+=2) {
+            sum += header_without_checksum[i]*2**8;
+            if (i+1 < header_without_checksum.length) {
+                sum += header_without_checksum[i+1];
+            }
         }
         while (Math.ceil(Math.log2(sum)) > 16) {
             sum = (sum >>> 16) + (sum & 0xFFFF);
@@ -83,8 +85,7 @@ export class Ipv4Packet implements Packet {
     }
 
     public static verifyChecksum(packet: Ipv4Packet): boolean {
-        // return this.calculateChecksum(packet.header) == 0;
-        return true;
+        return this.calculateChecksum(packet.header) == 0;
     }
 
     public static parsePacket(packet: Uint8Array): Ipv4Packet {
@@ -100,6 +101,16 @@ export class Ipv4Packet implements Packet {
         const options: number[] = packet.slice(Ipv4Packet._bytes_before_options, ihl * 4).toArray();
         const data: Uint8Array = packet.slice(ihl * 4);
         return new Ipv4Packet(dscp, ecn, ttl, protocol, src, dest, options, data, header_checksum);
+    }
+
+    public static getProto(packet: Uint8Array): InternetProtocolNumbers {
+        const proto_byte = 9;
+        return packet[proto_byte];
+    }
+
+    public static getDataBytes(packet: Uint8Array): Uint8Array {
+        const ihl: number = packet[0] &= 0b00001111;
+        return packet.slice(ihl * 4);
     }
 
     public static copyAndDecrement(packet: Ipv4Packet, ttl_decrement: number = 1): Ipv4Packet {

@@ -10,9 +10,9 @@ setDPI(canvas, 192);
 initCanvas();
 
 let draggable = false;
-export let focusedDevice: Device = undefined;
+export let focusedDevice: Device | null = null;
 export function clearFocus() {
-    focusedDevice = undefined;
+    focusedDevice = null;
 }
 
 canvas.onmousedown = (e) => {
@@ -73,14 +73,14 @@ function deleteElement(x: number, y: number) {
 }
 
 function connectDevices(x: number, y: number) {
-    if (focusedDevice === undefined) {
+    if (!focusedDevice) {
         focusedDevice = Device.getDevice(x, y);
         redrawCanvas();
     }
     else {
         let firstDevice = focusedDevice;
         let secondDevice = Device.getDevice(x, y);
-        if (secondDevice !== undefined && secondDevice !== firstDevice) {
+        if (secondDevice && secondDevice !== firstDevice) {
             Device.connectDevices(firstDevice, secondDevice)
             resetMode();
             redrawCanvas();
@@ -108,7 +108,10 @@ function deleteMode() {
 
 function toggleRecord(ele: HTMLElement) {
     const button = document.getElementById("recording-btn");
-    if (RECORDING_ON) {
+    if (!button) {
+        return;
+    }
+    else if (RECORDING_ON) {
         button.setAttribute('src', "assets/icons/recording-off.svg")
         ele.setAttribute('title', "Begin Recording")
         TURN_RECORDING_OFF();
@@ -123,19 +126,23 @@ function toggleRecord(ele: HTMLElement) {
 (<any>window).showRecentRecording = displayFrames;
 
 function createMode(name: string) {
+    if (!ctx) {
+        return;
+    }
+    
     document.body.style.cursor = 'crosshair'
     switch (name.toUpperCase()) {
         case ("PC"):
             current_click_func = (x: number, y: number) => {
                 Device.createDevice(new PersonalComputer(), x, y);
-                ctx.drawImage(pc_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
+                ctx!.drawImage(pc_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
                 resetMode();
             }
             break;
         case ("SERVER"):
             current_click_func = (x: number, y: number) => {
                 Device.createDevice(new PersonalComputer(), x, y);
-                ctx.drawImage(server_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
+                ctx!.drawImage(server_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
                 resetMode();
                 // eventually will have to add specialized features to server
             }
@@ -143,14 +150,14 @@ function createMode(name: string) {
         case ("ROUTER"):
             current_click_func = (x: number, y: number) => {
                 Device.createDevice(new Router(ROUTER_INF_NUM), x, y);
-                ctx.drawImage(router_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
+                ctx!.drawImage(router_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
                 resetMode();
             }
             break;
         case ("SWITCH"):
             current_click_func = (x: number, y: number) => {
                 Device.createDevice(new Switch(SWITCH_INF_NUM), x, y);
-                ctx.drawImage(switch_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
+                ctx!.drawImage(switch_img, x-ICON_SIZE/2, y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
                 resetMode();
             }
             break;

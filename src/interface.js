@@ -1,5 +1,5 @@
 import { Ipv4Address, Ipv4Prefix, MacAddress } from "./addressing.js";
-import { ArpPacket, OP } from "./protocols/arp.js";
+import { ArpPacket, ArpOP } from "./protocols/arp.js";
 import { DisplayFrame, EtherType, Frame } from "./frame.js";
 import { RECORDED_FRAMES, RECORDING_ON } from "./ui/variables.js";
 var InfStatus;
@@ -114,14 +114,14 @@ export class IdentifiedList extends Array {
     /**
      * Returns the item that has a given ID
      * @param id The ID of the item to look for
-     * @returns The item, if it exists. undefined otherwise.
+     * @returns The item, if it exists. null otherwise.
      */
     itemFromId(id) {
         const idx = this.indexOfId(id);
         if (idx != -1) {
             return this[idx];
         }
-        return undefined;
+        return null;
     }
 }
 /**
@@ -166,10 +166,10 @@ class InterfaceMatrix {
     }
     getCoords(mac) {
         const idx = this._list.indexOfId(mac);
-        if (idx !== undefined) {
-            return this._list[idx].coords;
+        if (idx == -1) {
+            return null;
         }
-        return undefined;
+        return this._list[idx].coords;
     }
     getRow(mac) {
         return this._matrix[this._list.indexOfId(mac)];
@@ -179,9 +179,9 @@ class InterfaceMatrix {
      * @returns If the interface has a neighbor, the neighbor interface. Else, undefined.
      */
     getNeighborInf(mac) {
-        const try_neighbor_idx = this.getRow(mac).indexOf(1);
-        if (try_neighbor_idx == -1) {
-            return undefined;
+        const try_neighbor_idx = this.getRow(mac)?.indexOf(1);
+        if (try_neighbor_idx === undefined || try_neighbor_idx == -1) {
+            return null;
         }
         return this._list[try_neighbor_idx];
     }
@@ -191,14 +191,14 @@ class InterfaceMatrix {
      */
     getLinkedInfs(mac) {
         const row = this.getRow(mac);
-        if (row !== undefined) {
+        if (row !== null) {
             return row.filter((x) => x == 2).map((x) => this._list[x]);
         }
         return [];
     }
     numLinks(mac) {
         const row = this.getRow(mac);
-        if (row !== undefined) {
+        if (row !== null) {
             return row.reduce((accumulator, currentValue) => (currentValue == 2 ? accumulator + 1 : accumulator), 0);
         }
         return -1;
@@ -210,7 +210,7 @@ class InterfaceMatrix {
      */
     isConnected(mac) {
         const row = this.getRow(mac);
-        if (row !== undefined) {
+        if (row !== null) {
             return row.some((x) => x == 1);
         }
         return false;
@@ -259,8 +259,13 @@ class InterfaceMatrix {
             this._matrix[secondMac_idx][firstMac_idx] = 0;
             const firstInf = this._list.itemFromId(firstMac);
             const secondInf = this._list.itemFromId(secondMac);
-            firstInf.clearFib();
-            secondInf.clearFib();
+            if (firstInf && secondInf) {
+                firstInf.clearFib();
+                secondInf.clearFib();
+            }
+            else {
+                throw `Invalid MAC Addresses`;
+            }
         }
         else {
             throw `Invalid MAC Addresses`;
@@ -280,7 +285,7 @@ class InterfaceMatrix {
     }
     async send(frame, egress_mac) {
         const sender_inf = this._list.itemFromId(egress_mac);
-        if (sender_inf === undefined) {
+        if (!sender_inf) {
             throw Error(`sender MAC ${frame.src_mac} does not belong to an interface`);
         }
         // if the sending interface has no neighbor, then simply return
@@ -288,7 +293,7 @@ class InterfaceMatrix {
             return;
         }
         const recipient_inf = this.getNeighborInf(egress_mac);
-        await recipient_inf.receive(frame, recipient_inf.mac);
+        await recipient_inf?.receive(frame, recipient_inf.mac);
     }
     get adjacency_list() {
         let adjacency_list = [];
@@ -317,13 +322,14 @@ export const InfMatrix = new InterfaceMatrix();
 class Interface {
     constructor(network_controller, layer, num, mac, tracked = true) {
         this._status = InfStatus.UP;
-        this._vlan = null;
+        this._vlan = 1;
         this._mtu = 1500; // TODO: implement MTU
         this._network_controller = network_controller;
         this._layer = layer;
         this.num = num;
-        if (tracked) {
+        if (tracked || !mac) {
             let assigned = false;
+            this._mac = MacAddress.loopback;
             while (!assigned) {
                 const mac = MacAddress.rand();
                 if (!InfMatrix.existsMac(mac)) {
@@ -427,7 +433,7 @@ export class L3Interface extends Interface {
      * @param ip the neighbor's IPv4 address
      */
     find(ip) {
-        const arppacket = new ArpPacket(OP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
+        const arppacket = new ArpPacket(ArpOP.REQUEST, this._mac, this._ipv4, MacAddress.broadcast, ip);
         const frame = new Frame(MacAddress.broadcast, this._mac, EtherType.ARP, arppacket.packet);
         setTimeout(() => {
             if (RECORDING_ON) {

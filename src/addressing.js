@@ -132,14 +132,14 @@ export class DeviceID {
         this.value = value;
     }
     static rand() {
-        return Math.floor(Math.random() * (this.max - this.min)) + this.min;
+        return Math.floor(Math.random() * (this.max - this.min + 1)) + this.min;
     }
     compare(other) {
         return this.value - other.value;
     }
 }
 DeviceID.min = 100000000;
-DeviceID.max = 1000000000;
+DeviceID.max = 999999999;
 class Uint8 {
     constructor(value) {
         this._value = value & 0xFF;
@@ -177,7 +177,7 @@ export class MacAddress {
                 Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256),
                 Math.trunc(Math.random() * 256), Math.trunc(Math.random() * 256)
             ];
-            if (!macArr.every((x) => x == 0xFF || x == 0x00)) {
+            if (!macArr.every((x) => x == 0x00) && !macArr.every((x) => x == 0xFF)) {
                 valid = true;
             }
         }
@@ -191,13 +191,13 @@ export class MacAddress {
     static parseString(str) {
         const arr = str.split(':');
         if (arr.length != 6) {
-            return undefined;
+            return null;
         }
         let num_arr = [0, 0, 0, 0, 0, 0];
         for (let i = 0; i < 6; i++) {
             const parsed = parseInt(arr[i], 16);
             if (isNaN(parsed) || parsed < 0 || parsed > 255) {
-                return undefined;
+                return null;
             }
             num_arr[i] = parsed;
         }
@@ -238,7 +238,6 @@ export class Ipv4Address {
     }
     set value(arr) {
         this._value = this._value.map((ele, idx) => (ele = arr[idx]));
-        console.log(`address set to ${this}`);
     }
     get value() {
         return this._value;
@@ -249,8 +248,18 @@ export class Ipv4Address {
     static get broadcast() {
         return new Ipv4Address([255, 255, 255, 255]);
     }
+    static get quad_zero() {
+        return new Ipv4Address([0, 0, 0, 0]);
+    }
+    static get loopback() {
+        return new Ipv4Address([127, 0, 0, 1]);
+    }
     isBroadcast() {
         return this.compare(Ipv4Address.broadcast) == 0;
+    }
+    isLoopback() {
+        const compare = this.compare(Ipv4Address.loopback);
+        return compare === 0 || Math.abs(compare) === 4;
     }
     toBinary() {
         // return Array.from(this._value).map((x) => (x).toString(2).padStart(8, "0")).join("");
@@ -296,10 +305,10 @@ export class Ipv4Address {
     compare(other) {
         for (let i = 0; i < 4; i++) {
             if (this.value[i] > other.value[i]) {
-                return 1;
+                return i + 1;
             }
             else if (this.value[i] < other.value[i]) {
-                return -1;
+                return -i - 1;
             }
         }
         return 0;
@@ -312,13 +321,13 @@ export class Ipv4Address {
     static parseString(str) {
         let arr = str.split('.');
         if (arr.length != 4) {
-            return undefined;
+            return null;
         }
         let num_arr = [0, 0, 0, 0];
         for (let i = 0; i < 4; i++) {
             const parsed = parseInt(arr[i]);
             if (isNaN(parsed) || parsed < 0 || parsed > 255) {
-                return undefined;
+                return null;
             }
             num_arr[i] = parsed;
         }
@@ -328,11 +337,10 @@ export class Ipv4Address {
 Ipv4Address.byteLength = 4;
 export class Ipv4Prefix {
     constructor(ipv4_prefix) {
-        this._ipv4_prefix = ipv4_prefix & 0x3F;
+        this._ipv4_prefix = (ipv4_prefix & 0x20) || (ipv4_prefix & 0x1F);
     }
     set value(ipv4_prefix) {
-        this._ipv4_prefix = ipv4_prefix & 0x3F;
-        console.log(`prefix set to ${this._ipv4_prefix}`);
+        this._ipv4_prefix = (ipv4_prefix & 0x20) || (ipv4_prefix & 0x1F);
     }
     get value() {
         return this._ipv4_prefix;
@@ -340,6 +348,9 @@ export class Ipv4Prefix {
     get mask() {
         let arr = spread([Math.pow(2, 32 - this._ipv4_prefix) - 1, 32]);
         return new Ipv4Address([255 - arr[0], 255 - arr[1], 255 - arr[2], 255 - arr[3]]);
+    }
+    toString() {
+        return this._ipv4_prefix.toString();
     }
 }
 function main() {
@@ -350,9 +361,9 @@ function main() {
     test.value = 300.7;
     console.log(`${test}\t${test.toBinary()}`);
     let testmac = new MacAddress([0x9c, 0x00, 0xcd, 0x61, 0x39, 0x48]);
-    console.log(`${testmac}\t${testmac.toBinary().match(/.{1,4}/g).join(' ')}`);
+    console.log(`${testmac}\t${testmac.toBinary().match(/.{1,4}/g)?.join(' ')}`);
     let testipv4 = new Ipv4Address([192, 168, 0, 10]);
-    console.log(`${testipv4}\t\t${testipv4.toBinary().match(/.{1,4}/g).join(' ')}`);
+    console.log(`${testipv4}\t\t${testipv4.toBinary().match(/.{1,4}/g)?.join(' ')}`);
     let testuint8array = new Uint8Array([1, 4, 8, 16]);
     console.log(`${testuint8array}\t\t${testuint8array.toBinary()}`);
 }

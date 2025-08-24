@@ -8,9 +8,9 @@ let current_click_func = selectDevice;
 setDPI(canvas, 192);
 initCanvas();
 let draggable = false;
-export let focusedDevice = undefined;
+export let focusedDevice = null;
 export function clearFocus() {
-    focusedDevice = undefined;
+    focusedDevice = null;
 }
 canvas.onmousedown = (e) => {
     if (0 <= e.offsetX && e.offsetX <= canvas.width && 0 <= e.offsetY && e.offsetY <= canvas.height) {
@@ -67,14 +67,14 @@ function deleteElement(x, y) {
     redrawCanvas();
 }
 function connectDevices(x, y) {
-    if (focusedDevice === undefined) {
+    if (!focusedDevice) {
         focusedDevice = Device.getDevice(x, y);
         redrawCanvas();
     }
     else {
         let firstDevice = focusedDevice;
         let secondDevice = Device.getDevice(x, y);
-        if (secondDevice !== undefined && secondDevice !== firstDevice) {
+        if (secondDevice && secondDevice !== firstDevice) {
             Device.connectDevices(firstDevice, secondDevice);
             resetMode();
             redrawCanvas();
@@ -101,7 +101,10 @@ function deleteMode() {
 window.deleteMode = deleteMode;
 function toggleRecord(ele) {
     const button = document.getElementById("recording-btn");
-    if (RECORDING_ON) {
+    if (!button) {
+        return;
+    }
+    else if (RECORDING_ON) {
         button.setAttribute('src', "assets/icons/recording-off.svg");
         ele.setAttribute('title', "Begin Recording");
         TURN_RECORDING_OFF();
@@ -116,6 +119,9 @@ function toggleRecord(ele) {
 window.toggleRecord = toggleRecord;
 window.showRecentRecording = displayFrames;
 function createMode(name) {
+    if (!ctx) {
+        return;
+    }
     document.body.style.cursor = 'crosshair';
     switch (name.toUpperCase()) {
         case ("PC"):

@@ -1,6 +1,8 @@
 import { concat, divide, Ipv4Address, limit, spread } from "../addressing.js";
 import { InternetProtocolNumbers, Ipv4Packet } from "./ip.js";
 
+export enum UdpPorts { DhcpServer = 67, DhcpClient = 68 }
+
 export class UdpDatagram {
     readonly src_port: number;
     readonly dest_port: number;
@@ -18,9 +20,8 @@ export class UdpDatagram {
         this.data = data;
         this.length = UdpDatagram._bytes_before_data + this.data.length;
 
-        // let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
-        // const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
-        const checksum_num = checksum ?? 0;
+        let pseudo_header = UdpDatagram.pseudoHeader(this, src_address, dest_address);
+        const checksum_num = checksum ?? Ipv4Packet.calculateChecksum(pseudo_header);
         this.checksum = new Uint8Array(spread([checksum_num, UdpDatagram._lengths[3]]));
 
         this.datagram = concat(this.header, this.data);
@@ -55,9 +56,8 @@ export class UdpDatagram {
     }
 
     public static verifyChecksum(datagram: UdpDatagram, src_address: Ipv4Address, dest_address: Ipv4Address): boolean {
-        return true; // TODO: fix checksum calculation
-        // let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
-        // return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
+        let pseudo_header = UdpDatagram.pseudoHeader(datagram, src_address, dest_address);
+        return Ipv4Packet.calculateChecksum(pseudo_header) == 0;
     }
 
     public static parse(datagram: Uint8Array, src_address: Ipv4Address, dest_address: Ipv4Address): UdpDatagram {
@@ -65,5 +65,17 @@ export class UdpDatagram {
         return new UdpDatagram(
             src_address, dest_address, divided[0], divided[1], datagram.slice(UdpDatagram._bytes_before_data), divided[3]
         );
+    }
+
+    public static getDataBytes(datagram: Uint8Array): Uint8Array {
+        return datagram.slice(UdpDatagram._bytes_before_data);
+    }
+
+    public static getSrcPort(datagram: Uint8Array): number {
+        return datagram[0] * 2**8 + datagram[1];
+    }
+
+    public static getDestPort(datagram: Uint8Array): number {
+        return datagram[2] * 2**8 + datagram[3];
     }
 }
